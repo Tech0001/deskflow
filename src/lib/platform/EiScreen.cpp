@@ -460,6 +460,7 @@ void EiScreen::enter()
   } else if (m_isPrimary) {
     LOG_DEBUG("releasing input capture at x=%i y=%i", m_cursorX, m_cursorY);
     m_portalInputCapture->release(m_cursorX, m_cursorY);
+    m_keyState->releasePressedKeys(getEventTarget());
     // no more button events once capture is released, so drop any held state
     updateButtons();
   }
@@ -658,6 +659,8 @@ void EiScreen::removeDevice(struct ei_device *device)
     wasTracked = true;
   }
   if (device == m_eiKeyboard) {
+    if (m_isPrimary)
+      m_keyState->releasePressedKeys(getEventTarget());
     m_eiKeyboard = ei_device_unref(m_eiKeyboard);
     wasTracked = true;
   }
@@ -762,14 +765,10 @@ void EiScreen::onKeyEvent(ei_event *event)
   bool pressed = ei_event_keyboard_get_key_is_press(event);
   KeyID keyid = m_keyState->mapKeyFromKeyval(keyval);
   auto keybutton = static_cast<KeyButton>(keyval);
-  bool repeat;
+  const bool repeat = pressed && m_keyState->isKeyDown(keybutton);
 
   m_keyState->updateXkbState(keyval, pressed);
   KeyModifierMask mask = m_keyState->pollActiveModifiers();
-
-  repeat = pressed && m_lastPressed == keyid && keyid != kKeyNone;
-
-  m_lastPressed = pressed ? keyid : kKeyNone;
 
   LOG_VERBOSE(
       "event: key %s%s keycode=%d keyid=%d mask=0x%x", pressed ? "press" : "release", repeat ? " (repeat)" : "",
@@ -1012,6 +1011,8 @@ void EiScreen::handleSystemEvent(const Event &)
       break;
     case EI_EVENT_DEVICE_PAUSED:
       LOG_DEBUG("device %s is paused", ei_device_get_name(device));
+      if (m_isPrimary && device == m_eiKeyboard)
+        m_keyState->releasePressedKeys(getEventTarget());
       m_isEmulating = false;
       // a paused device is reset to neutral by the EIS side and sends no
       // further events, so the releases for held buttons never arrive
@@ -1025,7 +1026,12 @@ void EiScreen::handleSystemEvent(const Event &)
       }
       break;
     case EI_EVENT_KEYBOARD_MODIFIERS:
-      // FIXME
+      if (device == m_eiKeyboard) {
+        m_keyState->updateXkbModifiers(
+            ei_event_keyboard_get_xkb_mods_depressed(event), ei_event_keyboard_get_xkb_mods_latched(event),
+            ei_event_keyboard_get_xkb_mods_locked(event), ei_event_keyboard_get_xkb_group(event)
+        );
+      }
       break;
 
     // events below are for a receiver context (barriers)
@@ -1036,6 +1042,8 @@ void EiScreen::handleSystemEvent(const Event &)
       break;
     case EI_EVENT_DEVICE_STOP_EMULATING:
       LOG_DEBUG("device %s stopped emulating", ei_device_get_name(device));
+      if (m_isPrimary && device == m_eiKeyboard)
+        m_keyState->releasePressedKeys(getEventTarget());
       break;
     case EI_EVENT_KEYBOARD_KEY:
       onKeyEvent(event);

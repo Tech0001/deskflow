@@ -35,6 +35,9 @@ public:
   void pollPressedKeys(KeyButtonSet &pressedKeys) const override;
   KeyID mapKeyFromKeyval(std::uint32_t keyval) const;
   void updateXkbState(std::uint32_t keyval, bool isPressed);
+  void
+  updateXkbModifiers(xkb_mod_mask_t depressed, xkb_mod_mask_t latched, xkb_mod_mask_t locked, xkb_layout_index_t group);
+  void releasePressedKeys(void *target);
   void clearStaleModifiers() override;
 
 protected:
@@ -47,10 +50,13 @@ private:
   void assignGeneratedModifiers(std::uint32_t keycode, KeyMap::KeyItem &item);
 
   EiScreen *m_screen = nullptr;
+  IEventQueue *m_eventQueue = nullptr;
 
   xkb_context *m_xkb = nullptr;
   xkb_keymap *m_xkbKeymap = nullptr;
   xkb_state *m_xkbState = nullptr;
+  bool m_hasModifierState = false;
+  KeyButtonSet m_pressedKeys;
 };
 
 } // namespace deskflow

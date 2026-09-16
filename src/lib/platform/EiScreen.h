@@ -148,8 +148,6 @@ private:
   // keyboard stuff
   EiKeyState *m_keyState = nullptr;
 
-  KeyID m_lastPressed = kKeyNone;
-
   // mouse buttons currently held, indexed by ButtonID
   std::bitset<NumButtonIDs> m_buttons;
 

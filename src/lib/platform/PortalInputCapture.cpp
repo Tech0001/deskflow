@@ -250,6 +250,8 @@ void PortalInputCapture::handleSessionClosed(XdpSession *session)
 void PortalInputCapture::claimClipboardOwnership([[maybe_unused]] XdpSession *session) const
 {
 #ifdef HAVE_LIBPORTAL_CLIPBOARD
+  if (!Settings::value(Settings::Server::EnableClipboard).toBool())
+    return;
   PortalClipboard::claimOwnership(m_clipboard, session);
 #endif
 }
@@ -257,6 +259,8 @@ void PortalInputCapture::claimClipboardOwnership([[maybe_unused]] XdpSession *se
 void PortalInputCapture::readClipboardSelection(XdpSession *session) const
 {
 #ifdef HAVE_LIBPORTAL_CLIPBOARD
+  if (!Settings::value(Settings::Server::EnableClipboard).toBool())
+    return;
   const qint64 maxBytes = static_cast<qint64>(m_screen->maximumClipboardSize()) * 1024;
   LOG_DEBUG("clipboard read cap: %lld bytes", static_cast<long long>(maxBytes));
 
@@ -276,8 +280,9 @@ void PortalInputCapture::readClipboardSelection(XdpSession *session) const
 void PortalInputCapture::handleSelectionTransfer(XdpSession *session, const char *mimeType, uint32_t serial) const
 {
 #ifdef HAVE_LIBPORTAL_CLIPBOARD
-  if (m_isActive) {
-    LOG_DEBUG("skipping clipboard selection transfer, clipboard is active");
+  if (!Settings::value(Settings::Server::EnableClipboard).toBool() || m_isActive) {
+    LOG_DEBUG("rejecting clipboard selection transfer while disabled or capturing input");
+    xdp_session_selection_write_done(session, serial, false);
     return;
   }
   PortalClipboard::serveSelectionTransfer(m_clipboard, session, mimeType, serial);
@@ -294,7 +299,8 @@ void PortalInputCapture::setupSession(XdpInputCaptureSession *session)
   XdpSession *parentSession = xdp_input_capture_session_get_session(session);
 
 #ifdef HAVE_LIBPORTAL_CLIPBOARD
-  if (!xdp_session_is_clipboard_enabled(parentSession) && m_portalVersion > 1) {
+  if (Settings::value(Settings::Server::EnableClipboard).toBool() && !xdp_session_is_clipboard_enabled(parentSession) &&
+      m_portalVersion > 1) {
     if (Settings::value(Settings::Server::XdpClipboardRetried).toBool()) {
       // some backends never report clipboard enabled even when granted; don't loop forever
       LOG_DEBUG("clipboard still not enabled on session after one retry, continuing without it");
@@ -602,7 +608,8 @@ gboolean PortalInputCapture::initSession()
       return FALSE;
     }
     m_session = session;
-    xdp_session_request_clipboard(xdp_input_capture_session_get_session(session));
+    if (Settings::value(Settings::Server::EnableClipboard).toBool())
+      xdp_session_request_clipboard(xdp_input_capture_session_get_session(session));
     xdp_input_capture_session_set_session_persistence(session, XDP_INPUT_CAPTURE_SESSION_PERSISTENCE_PERSISTENT);
     if (auto sessionToken = Settings::value(Settings::Server::XdpRestoreToken).toByteArray(); !sessionToken.isEmpty()) {
       xdp_input_capture_session_set_restore_token(session, strdup(sessionToken.data()));
@@ -736,6 +743,8 @@ void PortalInputCapture::handleActivated(
   m_isActive = true;
 
 #ifdef HAVE_LIBPORTAL_CLIPBOARD
+  if (!Settings::value(Settings::Server::EnableClipboard).toBool())
+    return;
   if (m_session) {
     LOG_DEBUG("reading clipboard selection on activation");
     m_screen->sendClipboardEvent(EventTypes::ClipboardGrabbed, kClipboardClipboard);

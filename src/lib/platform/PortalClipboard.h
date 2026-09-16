@@ -43,6 +43,11 @@ public:
   static QByteArray decodeFormat(IClipboard::Format format, const QByteArray &bytes);
   static QByteArray readSelectionBytes(XdpSession *session, const char *mime, qint64 maxBytes);
 
+  // Bounded, nonblocking pipe I/O. The caller retains ownership of fd.
+  // Incomplete or oversized reads are rejected rather than sharing truncated data.
+  static QByteArray readPipe(int fd, qint64 maxBytes);
+  static bool writePipe(int fd, const QByteArray &data);
+
   /// Advertise the cache's formats to the portal selection.
   static void claimOwnership(EiClipboard *cache, XdpSession *session);
 

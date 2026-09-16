@@ -18,6 +18,13 @@ class EiKeyStateTests : public QObject
 private Q_SLOTS:
   void initTestCase();
   void clearStaleModifiers_shiftDownAndNumLockOn_shiftClearedAndNumLockPreserved();
+  void updateXkbState_duplicateModifierDown_singleReleaseClearsModifier();
+  void updateXkbState_tracksPressedKeys();
+  void mapKeyFromKeyval_ctrlAltF1_returnsFunctionKey();
+  void mapKeyFromKeyval_shiftedText_preservesCase();
+  void updateXkbModifiers_snapshotIsAuthoritative();
+  void updateKeyState_preservesCompositorModifiersAndPressedKeys();
+  void releasePressedKeys_sendsReleasesAndResetsState();
 
 private:
   Arch m_arch;

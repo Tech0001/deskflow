@@ -13,6 +13,8 @@
 #include "deskflow/AppUtil.h"
 #include "platform/XDGKeyUtil.h"
 
+#include <xkbcommon/xkbcommon-keysyms.h>
+
 #include <cstddef>
 #include <memory>
 #include <unistd.h>
@@ -23,7 +25,8 @@ EiKeyState::EiKeyState(EiScreen *screen, IEventQueue *events)
     : KeyState(
           events, AppUtil::instance().getKeyboardLayoutList(), Settings::value(Settings::Client::LanguageSync).toBool()
       ),
-      m_screen{screen}
+      m_screen{screen},
+      m_eventQueue{events}
 {
   m_xkb = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
 
@@ -36,6 +39,7 @@ EiKeyState::EiKeyState(EiScreen *screen, IEventQueue *events)
 
 void EiKeyState::initDefaultKeymap()
 {
+  m_hasModifierState = false;
   if (m_xkbKeymap) {
     xkb_keymap_unref(m_xkbKeymap);
   }
@@ -75,6 +79,7 @@ void EiKeyState::init(int fd, size_t len)
     xkb_keymap_unref(m_xkbKeymap);
   }
   m_xkbKeymap = keymap;
+  m_hasModifierState = false;
 
   if (m_xkbState) {
     xkb_state_unref(m_xkbState);
@@ -107,10 +112,9 @@ std::int32_t EiKeyState::pollActiveGroup() const
   return xkb_state_serialize_layout(m_xkbState, XKB_STATE_LAYOUT_EFFECTIVE);
 }
 
-void EiKeyState::pollPressedKeys(KeyButtonSet &) const
+void EiKeyState::pollPressedKeys(KeyButtonSet &pressedKeys) const
 {
-  // FIXME
-  return;
+  pressedKeys.insert(m_pressedKeys.begin(), m_pressedKeys.end());
 }
 
 std::uint32_t EiKeyState::convertModMask(xkb_mod_mask_t xkbModMaskIn, bool mapMod2ToNumLock) const
@@ -163,9 +167,11 @@ std::uint32_t EiKeyState::convertModMask(xkb_mod_mask_t xkbModMaskIn, bool mapMo
       modMaskOut |= (1 << kKeyModifierBitControl);
     else if (strcmp(XKB_MOD_NAME_ALT, name) == 0 || strcmp(XKB_VMOD_NAME_ALT, name) == 0)
       modMaskOut |= (1 << kKeyModifierBitAlt);
-    else if (strcmp(XKB_MOD_NAME_LOGO, name) == 0 ||   // aka windows/command key
-             strcmp(XKB_VMOD_NAME_SUPER, name) == 0 || // virtual; usually mapped to logo key
-             strcmp(XKB_VMOD_NAME_HYPER, name) == 0)   // virtual; often mapped to caps lock key
+    else if (
+        strcmp(XKB_MOD_NAME_LOGO, name) == 0 ||   // aka windows/command key
+        strcmp(XKB_VMOD_NAME_SUPER, name) == 0 || // virtual; usually mapped to logo key
+        strcmp(XKB_VMOD_NAME_HYPER, name) == 0
+    ) // virtual; often mapped to caps lock key
       modMaskOut |= (1 << kKeyModifierBitSuper);
     else if (strcmp(XKB_MOD_NAME_MOD5, name) == 0 || strcmp(XKB_VMOD_NAME_LEVEL3, name) == 0)
       modMaskOut |= (1 << kKeyModifierBitAltGr);
@@ -175,9 +181,10 @@ std::uint32_t EiKeyState::convertModMask(xkb_mod_mask_t xkbModMaskIn, bool mapMo
       modMaskOut |= (1 << kKeyModifierBitNumLock);
     else if (strcmp(XKB_VMOD_NAME_SCROLL, name) == 0)
       modMaskOut |= (1 << kKeyModifierBitScrollLock);
-    else if ((strcmp(XKB_VMOD_NAME_META, name) == 0) || // virtual; the old meta (not the new meta/super/logo key)
-             (!mapMod2ToNumLock && strcmp(XKB_MOD_NAME_MOD2, name) == 0) || // spare, sometimes mapped to num lock.
-             (strcmp(XKB_MOD_NAME_MOD3, name) == 0) // spare, could be mapped to alt_r, caps lock, scroll lock, etc.
+    else if (
+        (strcmp(XKB_VMOD_NAME_META, name) == 0) || // virtual; the old meta (not the new meta/super/logo key)
+        (!mapMod2ToNumLock && strcmp(XKB_MOD_NAME_MOD2, name) == 0) || // spare, sometimes mapped to num lock.
+        (strcmp(XKB_MOD_NAME_MOD3, name) == 0) // spare, could be mapped to alt_r, caps lock, scroll lock, etc.
     )
       LOG_VERBOSE("modifier mask %s ignored", name);
     else
@@ -315,21 +322,14 @@ void EiKeyState::fakeKey(const Keystroke &keystroke)
 
 KeyID EiKeyState::mapKeyFromKeyval(uint32_t keyval) const
 {
-  // Get the base keysym from level 0, ignoring current modifiers.
-  // We need this because with newer xkeyboard-config, function keys use CTRL+ALT type,
-  // and xkb_state_key_get_one_sym() would return XF86_Switch_VT_* when Ctrl+Alt are
-  // pressed, instead of F1. We want to send F1 + modifiers to the server, not the
-  // VT switch action.
-  const auto shifted = xkb_keymap_num_levels_for_key(m_xkbKeymap, keyval, 0);
-  const xkb_keysym_t *syms;
-  int nsyms = xkb_keymap_key_get_syms_by_level(m_xkbKeymap, keyval, 0, shifted, &syms);
-
-  xkb_keysym_t xkbKeysym;
-  if (nsyms > 0) {
-    xkbKeysym = syms[0];
-  } else {
-    // Fallback to state-based lookup if level 0 has no symbols
-    xkbKeysym = xkb_state_key_get_one_sym(m_xkbState, keyval);
+  auto xkbKeysym = xkb_state_key_get_one_sym(m_xkbState, keyval);
+  // Preserve shifted text and the active layout, but send Ctrl+Alt+Fn as a
+  // function key rather than the local virtual-terminal switching action.
+  if (xkbKeysym >= XKB_KEY_XF86Switch_VT_1 && xkbKeysym <= XKB_KEY_XF86Switch_VT_12) {
+    const xkb_keysym_t *syms;
+    const auto group = xkb_state_key_get_layout(m_xkbState, keyval);
+    if (xkb_keymap_key_get_syms_by_level(m_xkbKeymap, keyval, group, 0, &syms) > 0)
+      xkbKeysym = syms[0];
   }
 
   auto keysym = static_cast<KeySym>(xkbKeysym);
@@ -342,11 +342,53 @@ KeyID EiKeyState::mapKeyFromKeyval(uint32_t keyval) const
 void EiKeyState::updateXkbState(uint32_t keyval, bool isPressed)
 {
   LOG_VERBOSE("update key state: keyval=%d pressed=%i", keyval, isPressed);
-  xkb_state_update_key(m_xkbState, keyval, isPressed ? XKB_KEY_DOWN : XKB_KEY_UP);
+  // A repeat is not another physical press. XKB counts modifier presses, so
+  // feeding repeats into it leaves a modifier down after its single release.
+  // Once EIS supplies modifier snapshots, it is the authority: mixing mask
+  // updates and locally predicted key updates also double-counts modifiers.
+  const auto button = static_cast<KeyButton>(keyval);
+  if (!m_hasModifierState && isPressed != m_pressedKeys.contains(button))
+    xkb_state_update_key(m_xkbState, keyval, isPressed ? XKB_KEY_DOWN : XKB_KEY_UP);
+  if (isPressed)
+    m_pressedKeys.insert(button);
+  else
+    m_pressedKeys.erase(button);
+  onKey(button, isPressed, pollActiveModifiers());
+}
+
+void EiKeyState::updateXkbModifiers(
+    xkb_mod_mask_t depressed, xkb_mod_mask_t latched, xkb_mod_mask_t locked, xkb_layout_index_t group
+)
+{
+  m_hasModifierState = true;
+  xkb_state_update_mask(m_xkbState, depressed, latched, locked, 0, 0, group);
+  onKey(0, false, pollActiveModifiers());
+}
+
+void EiKeyState::releasePressedKeys(void *target)
+{
+  KeyButtonSet pressedKeys;
+  pollPressedKeys(pressedKeys);
+  for (auto button : pressedKeys) {
+    const auto key = mapKeyFromKeyval(button);
+    onKey(button, false, 0);
+    // Pausing/removing an EIS keyboard does not send individual key releases.
+    // Forward them so the remote machine cannot retain a held key.
+    m_eventQueue->addEvent(Event(EventTypes::KeyStateKeyUp, target, KeyInfo::alloc(key, 0, button, 1)));
+  }
+  m_pressedKeys.clear();
+  m_hasModifierState = false;
+  clearStaleModifiers();
+  onKey(0, false, pollActiveModifiers());
 }
 
 void EiKeyState::clearStaleModifiers()
 {
+  // A fresh compositor snapshot can arrive before Screen::leavePrimary().
+  // Do not discard it when the generic screen code refreshes keyboard state.
+  if (m_hasModifierState)
+    return;
+
   const auto lockedMods = xkb_state_serialize_mods(m_xkbState, XKB_STATE_MODS_LOCKED);
   const auto lockedLayout = xkb_state_serialize_layout(m_xkbState, XKB_STATE_LAYOUT_LOCKED);
 

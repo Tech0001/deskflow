@@ -9,14 +9,17 @@
 #include "base/Log.h"
 #include "platform/EiClipboard.h"
 
+#include <array>
+#include <cerrno>
 #include <cstring>
+#include <fcntl.h>
 #include <poll.h>
 #include <unistd.h>
 
 #include <QBuffer>
 #include <QByteArrayList>
 #include <QDataStream>
-#include <QFile>
+#include <QDeadlineTimer>
 #include <QImage>
 #include <QList>
 #include <QPair>
@@ -158,33 +161,82 @@ QByteArray PortalClipboard::decodeFormat(IClipboard::Format format, const QByteA
 
 QByteArray PortalClipboard::readSelectionBytes(XdpSession *session, const char *mime, qint64 maxBytes)
 {
+  if (maxBytes <= 0)
+    return {};
   const int fd = xdp_session_selection_read(session, mime);
   if (fd < 0) {
     LOG_ERR("failed to read clipboard selection: invalid fd");
     return {};
   }
 
-  QFile pipe;
-  if (!pipe.open(fd, QIODevice::ReadOnly, QFileDevice::AutoCloseHandle)) {
-    LOG_WARN("failed to wrap clipboard pipe");
-    ::close(fd);
-    return {};
-  }
+  auto data = readPipe(fd, maxBytes);
+  ::close(fd);
+  return data;
+}
 
+QByteArray PortalClipboard::readPipe(int fd, qint64 maxBytes)
+{
+  if (maxBytes <= 0)
+    return {};
+  const int flags = fcntl(fd, F_GETFL);
+  if (flags < 0 || fcntl(fd, F_SETFL, flags | O_NONBLOCK) < 0)
+    return {};
+
+  const QDeadlineTimer deadline(kReadTimeoutMs);
   QByteArray contents;
   contents.reserve(std::min<qint64>(maxBytes, kChunkBytes));
-  while (contents.size() < maxBytes) {
+  std::array<char, kChunkBytes> buffer;
+  while (!deadline.hasExpired()) {
     pollfd pfd{fd, POLLIN, 0};
-    if (poll(&pfd, 1, kReadTimeoutMs) <= 0)
-      break;
+    const auto ready = poll(&pfd, 1, static_cast<int>(deadline.remainingTime()));
+    if (ready < 0 && errno == EINTR)
+      continue;
+    if (ready <= 0 || (pfd.revents & (POLLERR | POLLNVAL)))
+      return {};
 
-    const auto chunk = pipe.read(std::min<qint64>(kChunkBytes, maxBytes - contents.size()));
-    if (chunk.isEmpty())
-      break;
-
-    contents.append(chunk);
+    // Read one extra byte at the limit to distinguish EOF from an oversized
+    // clipboard. POLLHUP can accompany the last readable bytes of a pipe.
+    const auto remaining = maxBytes - contents.size();
+    const auto size = remaining == 0 ? 1 : std::min<qint64>(buffer.size(), remaining);
+    const auto count = ::read(fd, buffer.data(), size);
+    if (count == 0)
+      return contents;
+    if (count < 0) {
+      if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR)
+        continue;
+      return {};
+    }
+    if (count > remaining)
+      return {};
+    contents.append(buffer.data(), count);
   }
-  return contents;
+  LOG_WARN("timed out reading clipboard selection");
+  return {};
+}
+
+bool PortalClipboard::writePipe(int fd, const QByteArray &data)
+{
+  const int flags = fcntl(fd, F_GETFL);
+  if (flags < 0 || fcntl(fd, F_SETFL, flags | O_NONBLOCK) < 0)
+    return false;
+
+  const QDeadlineTimer deadline(kWriteTimeoutMs);
+  qint64 written = 0;
+  while (written < data.size() && !deadline.hasExpired()) {
+    pollfd pfd{fd, POLLOUT, 0};
+    const auto ready = poll(&pfd, 1, static_cast<int>(deadline.remainingTime()));
+    if (ready < 0 && errno == EINTR)
+      continue;
+    if (ready <= 0 || (pfd.revents & (POLLERR | POLLHUP | POLLNVAL)))
+      return false;
+    const auto count = ::write(fd, data.constData() + written, data.size() - written);
+    if (count < 0 && (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR))
+      continue;
+    if (count <= 0)
+      return false;
+    written += count;
+  }
+  return written == data.size();
 }
 
 void PortalClipboard::claimOwnership(EiClipboard *cache, XdpSession *session)
@@ -242,36 +294,13 @@ void PortalClipboard::serveSelectionTransfer(EiClipboard *cache, XdpSession *ses
     return;
   }
 
-  QFile pipe;
-  if (!pipe.open(fd, QIODevice::WriteOnly, QFileDevice::AutoCloseHandle)) {
-    LOG_WARN("failed to wrap clipboard pipe");
-    ::close(fd);
-    xdp_session_selection_write_done(session, serial, false);
-    return;
-  }
-
-  const char *buf = data.constData();
-  qint64 total = data.size();
-  qint64 written = 0;
-  while (written < total) {
-    pollfd pfd{fd, POLLOUT, 0};
-    if (poll(&pfd, 1, kWriteTimeoutMs) <= 0) {
-      LOG_ERR("timed out writing clipboard selection");
-      xdp_session_selection_write_done(session, serial, false);
-      return;
-    }
-
-    qint64 n = pipe.write(buf + written, total - written);
-    if (n <= 0) {
-      LOG_ERR("clipboard pipe write returned %lld", static_cast<long long>(n));
-      xdp_session_selection_write_done(session, serial, false);
-      return;
-    }
-    written += n;
-  }
-
-  xdp_session_selection_write_done(session, serial, true);
-  LOG_DEBUG("clipboard selection transfer complete, bytes: %lld", static_cast<long long>(written));
+  const bool success = writePipe(fd, data);
+  ::close(fd);
+  xdp_session_selection_write_done(session, serial, success);
+  if (success)
+    LOG_DEBUG("clipboard selection transfer complete, bytes: %lld", static_cast<long long>(data.size()));
+  else
+    LOG_WARN("clipboard selection transfer failed or timed out");
 }
 
 bool PortalClipboard::readSelectionIntoCache(

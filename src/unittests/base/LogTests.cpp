@@ -6,6 +6,10 @@
  */
 
 #include "LogTests.h"
+#include "base/LogOutputters.h"
+
+#include <QFile>
+#include <QTemporaryDir>
 #include <clocale>
 #include <iostream>
 #include <sstream>
@@ -118,6 +122,32 @@ void LogTests::printErrWithFileAndLine()
   std::cerr.rdbuf(old);
 
   QCOMPARE(string, "ERROR: test message test file:123");
+}
+
+void LogTests::fileRotationPreservesNewestArchive()
+{
+  QTemporaryDir directory;
+  QVERIFY(directory.isValid());
+  const auto path = directory.filePath("deskflow.log");
+  FileLogOutputter output(path);
+
+  const QString first(1024 * 1024, 'a');
+  QVERIFY(output.write(LogLevel::Level::Info, first));
+  QFile archive(path + ".1");
+  QVERIFY(archive.open(QIODevice::ReadOnly));
+  QCOMPARE(archive.readAll(), first.toUtf8() + '\n');
+  archive.close();
+
+  const QString second(1024 * 1024, 'b');
+  QVERIFY(output.write(LogLevel::Level::Info, second));
+  QVERIFY(archive.open(QIODevice::ReadOnly));
+  QCOMPARE(archive.readAll(), second.toUtf8() + '\n');
+  archive.close();
+
+  QVERIFY(output.write(LogLevel::Level::Info, "next event"));
+  QFile current(path);
+  QVERIFY(current.open(QIODevice::ReadOnly));
+  QCOMPARE(current.readAll(), QByteArray("next event\n"));
 }
 
 QTEST_MAIN(LogTests)
