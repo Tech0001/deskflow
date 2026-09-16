@@ -417,8 +417,20 @@ Do you want to connect to the server?
         <translation>&lt;p&gt;连接到服务器“%1”失败。&lt;/p&gt;&lt;p&gt;一个同名的客户端已连接到服务器。&lt;/p&gt;请确保您使用的名称唯一，且只有一个客户端进程实例在运行。&lt;/p&gt;</translation>
     </message>
     <message>
+        <source>Swap Control and Command</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>View &amp;Help</source>
         <translation type="unfinished">查看帮助(&amp;H)</translation>
+    </message>
+    <message>
+        <source>Connect a computer to change its keys</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Swap Control with Command (Super) for this computer. Saved across connections. Deskflow reconnects to apply the change.</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>No IP Detected</source>

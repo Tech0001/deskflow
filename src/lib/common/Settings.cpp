@@ -257,6 +257,9 @@ QVariant Settings::defaultValue(const QString &key)
   if (key == Server::ClipboardSize)
     return 3; // 3 MiB
 
+  if (key == Server::SwapControlSuperScreens)
+    return QStringList();
+
   return QVariant();
 }
 

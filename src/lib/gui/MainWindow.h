@@ -162,6 +162,7 @@ private:
   Fingerprint m_fingerprint;
 
   void serverClientsChanged(const QStringList &clients);
+  void updateModifierSwapMenu();
 
   inline static const auto m_guiSocketName = QStringLiteral("deskflow-gui");
   inline static const auto m_nameRegEx = QRegularExpression(QStringLiteral("^[\\w\\-_\\.]{0,255}$"));
@@ -178,6 +179,7 @@ private:
   QSize m_expandedSize = QSize();
   QStringList m_checkedClients;
   QStringList m_checkedServers;
+  QStringList m_connectedClients;
   QSystemTrayIcon *m_trayIcon = nullptr;
   QLocalServer *m_guiDupeChecker = nullptr;
   deskflow::gui::ipc::DaemonIpcClient *m_daemonIpcClient = nullptr;
@@ -188,6 +190,7 @@ private:
   // Window Menu
   QMenu *m_menuFile = nullptr;
   QMenu *m_menuEdit = nullptr;
+  QMenu *m_menuSwapModifiers = nullptr;
   QMenu *m_menuView = nullptr;
   QMenu *m_menuHelp = nullptr;
 

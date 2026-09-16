@@ -417,8 +417,20 @@ Do you want to connect to the server?
         <translation>&lt;p&gt;Не удалось подключиться к серверу &apos;%1&apos;.&lt;/p&gt;&lt;p&gt;Клиент с таким именем уже подключен к серверу.&lt;/p&gt;Убедитесь, что вы используете уникальное имя и запущен только один процесс клиента.&lt;/p&gt;</translation>
     </message>
     <message>
+        <source>Swap Control and Command</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>View &amp;Help</source>
         <translation type="unfinished">Просмотр &amp;справки</translation>
+    </message>
+    <message>
+        <source>Connect a computer to change its keys</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Swap Control with Command (Super) for this computer. Saved across connections. Deskflow reconnects to apply the change.</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>No IP Detected</source>

@@ -417,8 +417,20 @@ Do you want to connect to the server?
         <translation>&lt;p&gt;서버 &apos;%1&apos;에 연결하지 못했습니다.&lt;/p&gt;&lt;p&gt;같은 이름의 클라이언트가 이미 서버에 연결되어 있습니다.&lt;/p&gt;&lt;p&gt;고유한 이름을 사용하고, 클라이언트 프로세스가 하나만 실행 중인지 확인하세요.&lt;/p&gt;</translation>
     </message>
     <message>
+        <source>Swap Control and Command</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>View &amp;Help</source>
         <translation type="unfinished">도움말 보기(&amp;H)</translation>
+    </message>
+    <message>
+        <source>Connect a computer to change its keys</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Swap Control with Command (Super) for this computer. Saved across connections. Deskflow reconnects to apply the change.</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>No IP Detected</source>

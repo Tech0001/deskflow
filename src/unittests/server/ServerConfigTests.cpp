@@ -7,7 +7,10 @@
 
 #include "ServerConfigTests.h"
 
+#include "common/Settings.h"
 #include "server/Config.h"
+
+#include <sstream>
 
 class OnlySystemFilter : public InputFilter::Condition
 {
@@ -29,6 +32,62 @@ public:
 };
 
 using namespace deskflow::server;
+
+void ServerConfigTests::initTestCase()
+{
+  QVERIFY(m_settingsDir.isValid());
+  Settings::setSettingsFile(m_settingsDir.filePath("Deskflow.conf"));
+  Settings::setStateFile(m_settingsDir.filePath("Deskflow.state"));
+}
+
+void ServerConfigTests::modifierSwap_selectedComputerOnly()
+{
+  const auto key = Settings::Server::SwapControlSuperScreens;
+  Settings::setValue(key, QStringList{"mac.local"});
+  Config config(nullptr);
+  QVERIFY(config.addScreen("Mac.local"));
+  QVERIFY(config.addScreen("linux.local"));
+  const auto mac = config.getOptions("Mac.local");
+  QVERIFY(mac != nullptr);
+  QCOMPARE(mac->at(kOptionModifierMapForControl), OptionValue(kKeyModifierIDSuper));
+  QCOMPARE(mac->at(kOptionModifierMapForSuper), OptionValue(kKeyModifierIDControl));
+  const auto linux = config.getOptions("linux.local");
+  QVERIFY(linux != nullptr);
+  QVERIFY(!linux->contains(kOptionModifierMapForControl));
+  QVERIFY(!linux->contains(kOptionModifierMapForSuper));
+  Settings::setValue(key);
+}
+
+void ServerConfigTests::modifierSwap_externalConfigAndToggleOff()
+{
+  const auto key = Settings::Server::SwapControlSuperScreens;
+  const std::string text = "section: screens\nmac.local:\nctrl = alt\nsuper = super\nshift = shift\nend\n";
+  Settings::setValue(key, QStringList{"mac.local"});
+  // Reload settings to exercise persistence across restarts.
+  const auto path = Settings::settingsFile();
+  Settings::setSettingsFile(m_settingsDir.filePath("other.conf"));
+  Settings::setSettingsFile(path);
+  QCOMPARE(Settings::value(key).toStringList(), QStringList{"mac.local"});
+
+  Config enabled(nullptr);
+  std::istringstream input(text);
+  input >> enabled;
+  const auto swapped = enabled.getOptions("mac.local");
+  QVERIFY(swapped != nullptr);
+  QCOMPARE(swapped->at(kOptionModifierMapForControl), OptionValue(kKeyModifierIDSuper));
+  QCOMPARE(swapped->at(kOptionModifierMapForSuper), OptionValue(kKeyModifierIDControl));
+  QCOMPARE(swapped->at(kOptionModifierMapForShift), OptionValue(kKeyModifierIDShift));
+
+  Settings::setValue(key, QStringList{});
+  Config disabled(nullptr);
+  std::istringstream original(text);
+  original >> disabled;
+  const auto restored = disabled.getOptions("mac.local");
+  QVERIFY(restored != nullptr);
+  QCOMPARE(restored->at(kOptionModifierMapForControl), OptionValue(kKeyModifierIDAlt));
+  QCOMPARE(restored->at(kOptionModifierMapForSuper), OptionValue(kKeyModifierIDSuper));
+  Settings::setValue(key);
+}
 
 void ServerConfigTests::equalityCheck()
 {

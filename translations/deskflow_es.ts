@@ -457,6 +457,18 @@ Do you want to connect to the server?
         <translation>%1 Error de conexión</translation>
     </message>
     <message>
+        <source>Swap Control and Command</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Connect a computer to change its keys</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Swap Control with Command (Super) for this computer. Saved across connections. Deskflow reconnects to apply the change.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>No IP Detected</source>
         <translation type="unfinished">No se detectó ninguna IP</translation>
     </message>

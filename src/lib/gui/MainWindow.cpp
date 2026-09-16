@@ -526,6 +526,7 @@ void MainWindow::updateModeControls()
   const auto mode = m_coreProcess.mode();
   const bool isServer = mode == Settings::CoreMode::Server;
   const bool isClient = mode == Settings::CoreMode::Client;
+  m_menuSwapModifiers->menuAction()->setVisible(isServer);
 
   ui->serverOptions->setVisible(isServer);
   ui->clientOptions->setVisible(isClient);
@@ -666,6 +667,9 @@ void MainWindow::createMenuBar()
   m_menuFile->addAction(m_actionQuit);
 
   m_menuEdit->addAction(m_actionSettings);
+  m_menuSwapModifiers = m_menuEdit->addMenu(QString());
+  m_menuSwapModifiers->setToolTipsVisible(true);
+  connect(m_menuSwapModifiers, &QMenu::aboutToShow, this, &MainWindow::updateModifierSwapMenu);
 
   m_menuView->addAction(m_logDock->toggleViewAction());
 
@@ -689,6 +693,7 @@ void MainWindow::setupTrayIcon()
   );
   trayMenu->insertSeparator(m_actionMinimize);
   trayMenu->insertSeparator(m_actionTrayQuit);
+  trayMenu->insertMenu(m_actionMinimize, m_menuSwapModifiers);
   m_trayIcon->setContextMenu(trayMenu);
 
   setTrayIcon();
@@ -1028,7 +1033,7 @@ void MainWindow::changeEvent(QEvent *e)
     updateModeControlLabels();
     updateNetworkInfo();
     updateStatus();
-    serverClientsChanged({});
+    serverClientsChanged(m_connectedClients);
     updateText();
   }
 }
@@ -1051,6 +1056,7 @@ void MainWindow::updateText()
 {
   m_menuFile->setTitle(tr("&File"));
   m_menuEdit->setTitle(tr("&Edit"));
+  m_menuSwapModifiers->setTitle(tr("Swap Control and Command"));
   m_menuView->setTitle(tr("&View"));
   m_menuHelp->setTitle(tr("&Help"));
 
@@ -1203,9 +1209,42 @@ bool MainWindow::generateCertificate()
 
 void MainWindow::serverClientsChanged(const QStringList &clients)
 {
+  m_connectedClients = clients;
   if (m_coreProcess.mode() != CoreMode::Server || !m_coreProcess.isStarted())
     return;
   m_statusBar->setServerClients(clients);
+}
+
+void MainWindow::updateModifierSwapMenu()
+{
+  m_menuSwapModifiers->clear();
+  if (m_coreProcess.mode() != CoreMode::Server || !m_coreProcess.isStarted() || m_connectedClients.isEmpty()) {
+    m_menuSwapModifiers->addAction(tr("Connect a computer to change its keys"))->setEnabled(false);
+    return;
+  }
+
+  const auto swappedScreens = Settings::value(Settings::Server::SwapControlSuperScreens).toStringList();
+  for (const auto &name : m_connectedClients) {
+    // Escape menu mnemonics while retaining the exact screen name in settings.
+    auto label = name;
+    label.replace('&', QStringLiteral("&&"));
+    auto action = m_menuSwapModifiers->addAction(label);
+    action->setCheckable(true);
+    action->setChecked(swappedScreens.contains(name, Qt::CaseInsensitive));
+    action->setEnabled(Settings::isWritable());
+    action->setToolTip(
+        tr("Swap Control with Command (Super) for this computer. Saved across connections. "
+           "Deskflow reconnects to apply the change.")
+    );
+    connect(action, &QAction::triggered, this, [this, name](bool enabled) {
+      auto screens = Settings::value(Settings::Server::SwapControlSuperScreens).toStringList();
+      screens.removeIf([&name](const QString &screen) { return screen.compare(name, Qt::CaseInsensitive) == 0; });
+      if (enabled)
+        screens.append(name);
+      Settings::setValue(Settings::Server::SwapControlSuperScreens, screens);
+      m_coreProcess.restart();
+    });
+  }
 }
 
 void MainWindow::daemonIpcClientConnectionFailed()

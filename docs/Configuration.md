@@ -334,6 +334,20 @@ A computer can have the following options:
 |meta|  shift ctrl alt meta super none | Map the server's meta modifer to different key on a client computer|
 |super|  shift ctrl alt meta super none | Map the server's super modifer to different key on a client computer|
 
+#### Swap Control and Command for a computer
+
+On the server, open **Edit → Swap Control and Command** and check a connected
+computer. The same menu is available from the tray icon. Control then sends
+Command (Super), and Command/Super sends Control, for that computer only.
+The choice is saved across connections. Changing it briefly reconnects Deskflow.
+
+This preset works with both the graphical layout and external server config
+files. While enabled, it takes precedence over that computer's `ctrl` and `super`
+mapping entries. Unchecking it restores the mappings in the server config.
+The saved computer names are stored in `server/swapControlSuperScreens` in the
+general settings file. Existing clients support these modifier mappings; only
+the server needs the new toggle.
+
 ### links secion
 
 ''args'' is a list of computer names just like in the ''screens'' section except each computer is followed by a list of links, one per line. Each link has the form:

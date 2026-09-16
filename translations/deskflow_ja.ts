@@ -417,8 +417,20 @@ Do you want to connect to the server?
         <translation>&lt;p&gt;サーバー &apos;%1&apos; への接続に失敗しました。&lt;/p&gt;&lt;p&gt;同じ名前のクライアントがサーバーに接続済です。&lt;/p&gt;&lt;p&gt;名前の重複がないことと、クライアントプロセスが多重起動していない事を確認してください。&lt;/p&gt;</translation>
     </message>
     <message>
+        <source>Swap Control and Command</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>View &amp;Help</source>
         <translation>ヘルプを表示(&amp;H)</translation>
+    </message>
+    <message>
+        <source>Connect a computer to change its keys</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Swap Control with Command (Super) for this computer. Saved across connections. Deskflow reconnects to apply the change.</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>No IP Detected</source>

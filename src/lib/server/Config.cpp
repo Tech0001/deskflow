@@ -51,6 +51,14 @@ bool Config::addScreen(const std::string &name)
   for (const auto &alias : aliases)
     m_nameToCanonicalName.try_emplace(alias.toStdString(), name);
 
+  // Apply the per-computer preset before reading screen options. addOption
+  // keeps the first value, so the preset also works with an external config.
+  const auto swappedScreens = Settings::value(Settings::Server::SwapControlSuperScreens).toStringList();
+  if (swappedScreens.contains(QString::fromStdString(name), Qt::CaseInsensitive)) {
+    addOption(name, kOptionModifierMapForControl, kKeyModifierIDSuper);
+    addOption(name, kOptionModifierMapForSuper, kKeyModifierIDControl);
+  }
+
   return true;
 }
 
@@ -488,8 +496,10 @@ void Config::readSectionOptions(ConfigReadContext &s)
   while (s.readLine(line)) {
     if (line == "end") {
       return;
-    } else if (const auto l = QString::fromStdString(line).simplified();
-               !l.startsWith(QStringLiteral("keystroke")) && !l.startsWith(QStringLiteral("mousepress"))) {
+    } else if (
+        const auto l = QString::fromStdString(line).simplified();
+        !l.startsWith(QStringLiteral("keystroke")) && !l.startsWith(QStringLiteral("mousepress"))
+    ) {
       continue;
     }
 
@@ -699,9 +709,9 @@ void Config::readSectionLinks(ConfigReadContext &s)
 
 void Config::readSectionAliases(ConfigReadContext &s)
 {
-  qWarning(
-  ) << "Your server config has an alias section. Alias have moved to the general config this section will no be "
-       "parsed.";
+  qWarning()
+      << "Your server config has an alias section. Alias have moved to the general config this section will no be "
+         "parsed.";
   std::string line;
   while (s.readLine(line)) {
     if (line == "end") {
