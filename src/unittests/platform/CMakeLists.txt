@@ -27,6 +27,13 @@ elseif(APPLE)
 elseif(UNIX)
   if(LIBEI_FOUND)
     create_test(
+      NAME EiScrollStateTests
+      DEPENDS platform
+      LIBS base arch
+      SOURCE EiScrollStateTests.cpp
+      WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/src/lib/platform"
+    )
+    create_test(
       NAME EiKeyStateTests
       DEPENDS platform
       LIBS base arch

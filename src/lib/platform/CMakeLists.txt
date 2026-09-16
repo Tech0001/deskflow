@@ -152,6 +152,7 @@ elseif(UNIX)
       EiKeyState.h
       EiScreen.cpp
       EiScreen.h
+      EiScrollState.h
     )
     # The Portal sources also require EI.
     if(LIBPORTAL_FOUND)
