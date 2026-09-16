@@ -55,6 +55,40 @@ void OSXKeyStateTests::mapModifiersFromOSX_OSXMask()
   QCOMPARE(outMask, KeyModifierNumLock);
 }
 
+void OSXKeyStateTests::mapPrintScreenToF13()
+{
+  deskflow::KeyMap keyMap;
+  EventQueue eventQueue;
+  OSXKeyState keyState(&eventQueue, keyMap, {"en"}, true);
+  keyState.updateKeyMap();
+
+  for (const auto key : {kKeyPrint, kKeyF13}) {
+    uint32_t virtualKey = 0;
+    uint32_t modifiers = 0;
+    QVERIFY(keyState.mapDeskflowHotKeyToMac(key, 0, virtualKey, modifiers));
+    QCOMPARE(virtualKey, uint32_t(kVK_F13));
+    QCOMPARE(modifiers, uint32_t(0));
+  }
+}
+
+void OSXKeyStateTests::nativeF13KeepsItsKeyID()
+{
+  deskflow::KeyMap keyMap;
+  EventQueue eventQueue;
+  OSXKeyState keyState(&eventQueue, keyMap, {"en"}, true);
+
+  // Create an event for translation only; do not post a key to the desktop.
+  CGEventRef event = CGEventCreateKeyboardEvent(nullptr, kVK_F13, true);
+  QVERIFY(event != nullptr);
+  OSXKeyState::KeyIDs ids;
+  const auto button = keyState.mapKeyFromEvent(ids, nullptr, event);
+  CFRelease(event);
+
+  QCOMPARE(button, KeyButton(kVK_F13 + 1));
+  QCOMPARE(ids.size(), size_t(1));
+  QCOMPARE(ids.front(), kKeyF13);
+}
+
 void OSXKeyStateTests::fakePollShift()
 {
   deskflow::KeyMap keyMap;

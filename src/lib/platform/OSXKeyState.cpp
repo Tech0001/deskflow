@@ -736,6 +736,14 @@ void OSXKeyState::getKeyMapForSpecialKeys(deskflow::KeyMap &keyMap, int32_t grou
     }
   }
 
+  // Accept PC Print Screen as F13 on Mac clients. Keep this receive alias
+  // out of s_controlKeys so a native Mac F13 still sends kKeyF13.
+  deskflow::KeyMap::KeyItem printScreen{};
+  printScreen.m_id = kKeyPrint;
+  printScreen.m_group = group;
+  printScreen.m_button = mapVirtualKeyToKeyButton(kVK_F13);
+  keyMap.addKeyEntry(printScreen);
+
   // note:  we don't special case the number pad keys.  querying the
   // mac keyboard returns the non-keypad version of those keys but
   // a KeyState always provides a mapping from keypad keys to

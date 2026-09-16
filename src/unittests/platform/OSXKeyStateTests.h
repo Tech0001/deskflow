@@ -17,6 +17,8 @@ private Q_SLOTS:
   void initTestCase();
   // Test are run in order top to bottom
   void mapModifiersFromOSX_OSXMask();
+  void mapPrintScreenToF13();
+  void nativeF13KeepsItsKeyID();
   void fakePollShift();
   void fakePollChar();
   void fakePollCharWithModifier();
