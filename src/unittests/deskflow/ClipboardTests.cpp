@@ -15,6 +15,29 @@ void ClipboardTests::initTestCase()
   m_log.setFilter(LogLevel::Level::Verbose);
 }
 
+void ClipboardTests::fileOfferRoundTripAndUnknownFormat()
+{
+  Clipboard source;
+  source.open(0);
+  source.empty();
+  source.add(IClipboard::Format::Files, "{\"version\":1}");
+  source.close();
+  auto bytes = source.marshall();
+  Clipboard target;
+  target.unmarshall(bytes, 0);
+  target.open(0);
+  QVERIFY(target.has(IClipboard::Format::Files));
+  QCOMPARE(target.get(IClipboard::Format::Files), std::string("{\"version\":1}"));
+  target.close();
+  // Unknown unsigned wire IDs must be skipped, never become negative indexes.
+  for (int i = 4; i < 8; ++i)
+    bytes[i] = '\xff';
+  target.unmarshall(bytes, 0);
+  target.open(0);
+  QVERIFY(!target.has(IClipboard::Format::Files));
+  target.close();
+}
+
 void ClipboardTests::basicFunction()
 {
   Clipboard clipboard;

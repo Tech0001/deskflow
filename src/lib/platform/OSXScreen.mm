@@ -176,6 +176,9 @@ OSXScreen::OSXScreen(IEventQueue *events, bool isPrimary, bool enableLangSync)
   }
 
   // install event handlers
+  m_fileClipboard = std::make_unique<deskflow::OSXFileClipboard>([this] {
+    sendClipboardEvent(EventTypes::ClipboardGrabbed, kClipboardClipboard);
+  });
   m_events->addHandler(EventTypes::System, m_events->getSystemTarget(), [this](const auto &e) {
     handleSystemEvent(e);
   });
@@ -186,6 +189,7 @@ OSXScreen::OSXScreen(IEventQueue *events, bool isPrimary, bool enableLangSync)
 
 OSXScreen::~OSXScreen()
 {
+  m_fileClipboard.reset();
   disable();
 
   m_events->adoptBuffer(nullptr);
@@ -230,6 +234,8 @@ void *OSXScreen::getEventTarget() const
 
 bool OSXScreen::getClipboard(ClipboardID, IClipboard *dst) const
 {
+  if (m_fileClipboard && m_fileClipboard->getClipboard(dst))
+    return true;
   Clipboard::copy(dst, &m_pasteboard);
   return true;
 }
@@ -839,6 +845,8 @@ void OSXScreen::leave()
 
 bool OSXScreen::setClipboard(ClipboardID, const IClipboard *src)
 {
+  if (m_fileClipboard && m_fileClipboard->setClipboard(src))
+    return true;
   if (src != nullptr) {
     LOG_DEBUG("setting clipboard");
     Clipboard::copy(&m_pasteboard, src);
@@ -848,6 +856,8 @@ bool OSXScreen::setClipboard(ClipboardID, const IClipboard *src)
 
 void OSXScreen::checkClipboards()
 {
+  if (m_fileClipboard && m_fileClipboard->poll())
+    return;
   LOG_VERBOSE("checking clipboard");
   if (m_pasteboard.synchronize()) {
     LOG_DEBUG("clipboard changed");

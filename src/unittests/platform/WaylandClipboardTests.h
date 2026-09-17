@@ -20,6 +20,8 @@ private Q_SLOTS:
   void initTestCase();
   void init();
   void readTextPreservesUtf8AndNewlines();
+  void nonFileUrisStillCopyText_data();
+  void nonFileUrisStillCopyText();
   void writeTextUsesStdin();
   void failedWriteCanBeRetried();
   void imageRoundTrip();
@@ -27,6 +29,7 @@ private Q_SLOTS:
   void slowReaderDoesNotBlockCaller();
   void slowWriterDoesNotBlockCaller();
   void remoteWriteSupersedesPendingRead();
+  void copiedFilesRoundTrip();
 
 private:
   void writeFile(const QString &name, const QByteArray &data);

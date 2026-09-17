@@ -67,6 +67,8 @@ elseif(APPLE)
     OSXAutoTypes.h
     OSXClipboard.cpp
     OSXClipboard.h
+    OSXFileClipboard.mm
+    OSXFileClipboard.h
     OSXClipboardAnyBitmapConverter.cpp
     OSXClipboardAnyBitmapConverter.h
     OSXClipboardAnyTextConverter.cpp
@@ -181,9 +183,13 @@ elseif(UNIX)
 endif()
 
 # wayland.h is included to check for wayland support
+if(UNIX)
+  list(APPEND PLATFORM_SOURCES FileTransfer.cpp FileTransfer.h)
+endif()
 add_library(platform STATIC ${PLATFORM_SOURCES})
 
 target_link_libraries(platform PUBLIC client ${libs})
+target_link_libraries(platform PRIVATE Qt6::Network)
 
 if(UNIX)
   target_link_libraries(platform PRIVATE net app)

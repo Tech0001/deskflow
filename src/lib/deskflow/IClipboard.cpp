@@ -44,7 +44,7 @@ void IClipboard::unmarshall(IClipboard *clipboard, const std::string_view &data,
         break;
       }
       // get the format id
-      auto format = static_cast<IClipboard::Format>(readUInt32(index));
+      const auto format = readUInt32(index);
       index += 4;
 
       // get the size of the format data
@@ -60,8 +60,8 @@ void IClipboard::unmarshall(IClipboard *clipboard, const std::string_view &data,
       // save the data if it's a known format.  if either the client
       // or server supports more clipboard formats than the other
       // then one of them will get a format >= TotalFormats here.
-      if (format < IClipboard::Format::TotalFormats) {
-        clipboard->add(format, std::string(index, size));
+      if (format < static_cast<uint32_t>(IClipboard::Format::TotalFormats)) {
+        clipboard->add(static_cast<IClipboard::Format>(format), std::string(index, size));
       }
       index += size;
     }

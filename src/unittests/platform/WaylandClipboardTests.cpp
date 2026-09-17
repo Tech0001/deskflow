@@ -6,13 +6,16 @@
 
 #include "WaylandClipboardTests.h"
 
+#include "common/Settings.h"
 #include "deskflow/Clipboard.h"
+#include "platform/FileTransfer.h"
 #include "platform/PortalClipboard.h"
 #include "platform/WaylandClipboard.h"
 
 #include <QBuffer>
 #include <QElapsedTimer>
 #include <QImage>
+#include <QProcess>
 
 #include <atomic>
 
@@ -66,11 +69,16 @@ void WaylandClipboardTests::initTestCase()
 {
   m_arch.init();
   QVERIFY(m_dir.isValid());
+  Settings::setSettingsFile(m_dir.filePath("settings.conf"));
   writeFile("paste", R"PY(#!/usr/bin/env python3
 import pathlib, sys, time
 root = pathlib.Path(__file__).parent
 if '--list-types' in sys.argv:
     sys.stdout.buffer.write((root / 'types').read_bytes())
+elif '--watch' in sys.argv:
+    print('changed', flush=True)
+    while True:
+        time.sleep(0.1)
 else:
     mode = (root / 'mode').read_text()
     (root / 'started').touch()
@@ -100,6 +108,7 @@ data = sys.stdin.buffer.read()
 
 void WaylandClipboardTests::init()
 {
+  Settings::setValue(Settings::Security::ShareFiles, false);
   writeFile("types", "text/plain;charset=utf-8\ntext/plain\n");
   writeFile("mode", "");
   writeFile("data", "local clipboard");
@@ -120,6 +129,33 @@ void WaylandClipboardTests::readTextPreservesUtf8AndNewlines()
   QCOMPARE(getData(clipboard), text);
   // Reading our cached content again must not claim a new clipboard owner.
   fallback.requestRead(1024);
+}
+
+void WaylandClipboardTests::nonFileUrisStillCopyText_data()
+{
+  QTest::addColumn<bool>("shareFiles");
+  QTest::newRow("file sharing disabled") << false;
+  QTest::newRow("file sharing enabled") << true;
+}
+
+void WaylandClipboardTests::nonFileUrisStillCopyText()
+{
+  QFETCH(bool, shareFiles);
+  Settings::setValue(Settings::Security::ShareFiles, shareFiles);
+  Settings::setValue(Settings::Security::TlsEnabled, true);
+  Settings::setValue(Settings::Security::CheckPeers, true);
+  Settings::setValue(Settings::Server::EnableClipboard, true);
+  const QByteArray url("https://example.com/copied-link");
+  writeFile("types", "text/uri-list\ntext/plain;charset=utf-8\n");
+  writeFile("data", url);
+  std::atomic<int> changed = 0;
+  WaylandClipboard fallback([&] { ++changed; }, copyCommand(), pasteCommand());
+  fallback.requestRead(1024);
+  QTRY_COMPARE(changed.load(), 1);
+  Clipboard clipboard;
+  QVERIFY(fallback.copyTo(&clipboard));
+  QCOMPARE(getData(clipboard), url);
+  QVERIFY(getData(clipboard, IClipboard::Format::Files).isEmpty());
 }
 
 void WaylandClipboardTests::writeTextUsesStdin()
@@ -238,6 +274,73 @@ void WaylandClipboardTests::remoteWriteSupersedesPendingRead()
   QVERIFY(fallback.copyTo(&cached));
   QCOMPARE(getData(cached), QByteArray("new remote clipboard"));
   QCOMPARE(changed.load(), 0);
+}
+
+void WaylandClipboardTests::copiedFilesRoundTrip()
+{
+  Settings::setSettingsFile(m_dir.filePath("settings.conf"));
+  Settings::setValue(Settings::Security::ShareFiles, true);
+  Settings::setValue(Settings::Security::TlsEnabled, true);
+  Settings::setValue(Settings::Security::CheckPeers, true);
+  Settings::setValue(Settings::Server::EnableClipboard, true);
+  QProcess openssl;
+  openssl.start(
+      "openssl", {"req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1", "-subj", "/CN=Clipboard-file-test",
+                  "-keyout", m_dir.filePath("key.pem"), "-out", m_dir.filePath("cert.pem")}
+  );
+  QVERIFY(openssl.waitForFinished(10000));
+  QCOMPARE(openssl.exitCode(), 0);
+  writeFile("identity.pem", readFile("key.pem") + readFile("cert.pem"));
+  Settings::setValue(Settings::Security::Certificate, m_dir.filePath("identity.pem"));
+  writeFile("copied file.txt", "real file contents\n");
+  const QStringList source{m_dir.filePath("copied file.txt")};
+  writeFile("types", "text/uri-list\ntext/plain\n");
+  writeFile("data", deskflow::FileTransfer::urisFromPaths(source));
+  std::atomic<int> changes = 0;
+  {
+    auto files = std::make_unique<deskflow::FileTransfer>(
+        m_dir.filePath("identity.pem"), 0, m_dir.filePath("reader-cache"), QStringList{"127.0.0.1"}
+    );
+    WaylandClipboard reader([&] { ++changes; }, copyCommand(), pasteCommand(), std::move(files));
+    reader.requestRead(1024 * 1024);
+    QTRY_COMPARE(changes.load(), 1);
+    Clipboard copied;
+    QVERIFY(reader.copyTo(&copied));
+    const auto offer = getData(copied, IClipboard::Format::Files);
+    QVERIFY(deskflow::FileTransfer::validOffer(offer));
+    QTemporaryDir target;
+    deskflow::FileTransfer receiver(m_dir.filePath("identity.pem"), 0, target.path(), {"127.0.0.1"});
+    const auto received = receiver.receive(offer);
+    QCOMPARE(received.size(), 1);
+    QFile file(received[0]);
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    QCOMPARE(file.readAll(), QByteArray("real file contents\n"));
+  }
+  {
+    deskflow::FileTransfer sender(m_dir.filePath("identity.pem"), 0, {}, {"127.0.0.1"});
+    const auto offer = sender.offer(source);
+    Clipboard remote;
+    remote.open(0);
+    remote.empty();
+    remote.add(IClipboard::Format::Files, offer.toStdString());
+    remote.close();
+    auto files = std::make_unique<deskflow::FileTransfer>(
+        m_dir.filePath("identity.pem"), 0, m_dir.filePath("writer-cache"), QStringList{"127.0.0.1"}
+    );
+    WaylandClipboard writer([] {}, copyCommand(), pasteCommand(), std::move(files));
+    QVERIFY(writer.setClipboard(&remote, 1024 * 1024));
+    QTRY_VERIFY_WITH_TIMEOUT(readFile("output").startsWith("file://"), 10000);
+    QCOMPARE(readFile("args"), QByteArray("--type\ntext/uri-list"));
+    const auto paths = deskflow::FileTransfer::pathsFromUris(readFile("output"));
+    QCOMPARE(paths.size(), 1);
+    QFile file(paths[0]);
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    QCOMPARE(file.readAll(), QByteArray("real file contents\n"));
+    const auto parent = QFileInfo(paths[0]).dir();
+    QVERIFY(parent.dirName().startsWith("transfer-"));
+    QDir(parent).removeRecursively();
+  }
+  Settings::setValue(Settings::Security::ShareFiles, false);
 }
 
 QTEST_GUILESS_MAIN(WaylandClipboardTests)

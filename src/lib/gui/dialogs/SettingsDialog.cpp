@@ -105,6 +105,8 @@ void SettingsDialog::initConnections() const
   connect(ui->cbRunExitCommand, &QCheckBox::toggled, ui->lineCommandExit, &QLineEdit::setEnabled);
 
   connect(ui->groupSecurity, &QGroupBox::toggled, this, &SettingsDialog::updateTlsControlsEnabled);
+  connect(ui->cbRequireClientCert, &QCheckBox::toggled, this, &SettingsDialog::updateTlsControlsEnabled);
+  connect(ui->cbShareFiles, &QCheckBox::toggled, this, &SettingsDialog::setButtonBoxEnabledButtons);
   connect(ui->groupService, &QGroupBox::toggled, this, &SettingsDialog::updateControls);
   connect(ui->btnClearAllSettings, &QPushButton::clicked, this, &SettingsDialog::resetAllSettings);
   connect(ui->btnTlsRegenCert, &QPushButton::clicked, this, &SettingsDialog::regenCertificates);
@@ -235,6 +237,7 @@ void SettingsDialog::accept()
   Settings::setValue(Settings::Gui::CloseToTray, ui->rbCloseToTray->isChecked());
   Settings::setValue(Settings::Gui::SymbolicTrayIcon, ui->rbIconMono->isChecked());
   Settings::setValue(Settings::Security::CheckPeers, ui->cbRequireClientCert->isChecked());
+  Settings::setValue(Settings::Security::ShareFiles, ui->cbShareFiles->isChecked());
   Settings::setValue(Settings::Core::Language, I18N::nativeTo639Name(ui->comboLanguage->currentText()));
   Settings::setValue(Settings::Log::GuiDebug, ui->cbGuiDebug->isChecked());
   Settings::setValue(Settings::Gui::ShowVersionInTitle, ui->cbShowVersion->isChecked());
@@ -318,6 +321,7 @@ void SettingsDialog::updateTlsControls()
 
   ui->lineTlsCertPath->setText(certificate);
   ui->cbRequireClientCert->setChecked(Settings::value(Settings::Security::CheckPeers).toBool());
+  ui->cbShareFiles->setChecked(Settings::value(Settings::Security::ShareFiles).toBool());
   ui->groupSecurity->setChecked(TlsUtility::isEnabled());
 
   ui->groupSecurity->setEnabled(Settings::isWritable());
@@ -337,6 +341,10 @@ void SettingsDialog::updateTlsControlsEnabled()
   ui->widgetTlsCert->setEnabled(enabled);
   ui->btnTlsRegenCert->setEnabled(enabled);
   ui->cbRequireClientCert->setEnabled(enabled && !isClientMode());
+  ui->cbShareFiles->setEnabled(enabled && ui->cbRequireClientCert->isChecked());
+#ifdef Q_OS_WIN
+  ui->cbShareFiles->setVisible(false);
+#endif
 }
 
 bool SettingsDialog::isClientMode() const
@@ -440,6 +448,7 @@ bool SettingsDialog::isModified() const
       (ui->comboTlsKeyLength->currentText() != Settings::value(Settings::Security::KeySize).toString()) ||
       (ui->groupSecurity->isChecked() != Settings::value(Settings::Security::TlsEnabled).toBool()) ||
       (ui->cbRequireClientCert->isChecked() != Settings::value(Settings::Security::CheckPeers).toBool()) ||
+      (ui->cbShareFiles->isChecked() != Settings::value(Settings::Security::ShareFiles).toBool()) ||
       (ui->cbRunEnterCommand->isChecked() != Settings::value(Settings::Core::EnableEnterCommand).toBool()) ||
       (ui->cbRunExitCommand->isChecked() != Settings::value(Settings::Core::EnableExitCommand).toBool()) ||
       (ui->lineCommandEnter->text() != Settings::value(Settings::Core::ScreenEnterCommand).toString()) ||
@@ -476,6 +485,7 @@ bool SettingsDialog::isDefault() const
       (ui->comboTlsKeyLength->currentText() == Settings::defaultValue(Settings::Security::KeySize).toString()) &&
       (ui->groupSecurity->isChecked() == Settings::defaultValue(Settings::Security::TlsEnabled).toBool()) &&
       (ui->cbRequireClientCert->isChecked() == Settings::defaultValue(Settings::Security::CheckPeers).toBool()) &&
+      (ui->cbShareFiles->isChecked() == Settings::defaultValue(Settings::Security::ShareFiles).toBool()) &&
       (ui->lineCommandEnter->text() == Settings::defaultValue(Settings::Core::ScreenEnterCommand).toString()) &&
       (ui->lineCommandExit->text() == Settings::defaultValue(Settings::Core::ScreenExitCommand).toString()) &&
       (ui->cbRunEnterCommand->isChecked() == Settings::defaultValue(Settings::Core::EnableEnterCommand).toBool()) &&
@@ -486,6 +496,7 @@ bool SettingsDialog::isDefault() const
 
 void SettingsDialog::resetToDefault()
 {
+  ui->cbShareFiles->setChecked(Settings::defaultValue(Settings::Security::ShareFiles).toBool());
   ui->sbPort->setValue(Settings::defaultValue(Settings::Core::Port).toInt());
   ui->comboLogLevel->setCurrentIndex(
       static_cast<int>(LogLevel::fromOption(Settings::defaultValue(Settings::Log::Level).toString()))

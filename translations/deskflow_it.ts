@@ -1267,6 +1267,14 @@ L&apos;abilitazione di questa impostazione disabiliterà l&apos;interfaccia graf
         <source>Remove all settings</source>
         <translation type="unfinished">Rimuovi tutte le impostazioni</translation>
     </message>
+    <message>
+        <source>Share copied files and folders</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Copy files between Finder and Nautilus. Enable on both computers; encrypted connections and certificate verification are required. Files are copied, never moved.</source>
+        <translation type="unfinished"></translation>
+    </message>
 </context>
 <context>
     <name>SettingsDialogButtonBox</name>

@@ -7,11 +7,13 @@
 #pragma once
 
 #include "deskflow/IClipboard.h"
+#include "platform/FileTransfer.h"
 
 #include <QString>
 
 #include <condition_variable>
 #include <functional>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <thread>
@@ -23,7 +25,10 @@ namespace deskflow {
 class WaylandClipboard
 {
 public:
-  explicit WaylandClipboard(std::function<void()> changed, QString copyCommand = {}, QString pasteCommand = {});
+  explicit WaylandClipboard(
+      std::function<void()> changed, QString copyCommand = {}, QString pasteCommand = {},
+      std::unique_ptr<FileTransfer> files = {}
+  );
   ~WaylandClipboard();
 
   bool available() const;
@@ -35,8 +40,9 @@ public:
 
 private:
   void run();
-  std::optional<std::string> readSelection(qint64 maxBytes) const;
-  bool writeSelection(const std::string &data, qint64 maxBytes) const;
+  std::optional<std::string> readSelection(qint64 maxBytes, uint64_t generation);
+  bool writeSelection(const std::string &data, qint64 maxBytes, uint64_t generation);
+  bool superseded(uint64_t generation) const;
 
   const QString m_copyCommand;
   const QString m_pasteCommand;
@@ -51,6 +57,7 @@ private:
   bool m_cacheOnClipboard = false;
   qint64 m_maxBytes = 0;
   uint64_t m_generation = 0;
+  std::unique_ptr<FileTransfer> m_files;
 };
 
 } // namespace deskflow

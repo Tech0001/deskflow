@@ -8,6 +8,7 @@
 
 #include "base/Log.h"
 #include "deskflow/Clipboard.h"
+#include "platform/FileTransfer.h"
 #include "platform/PortalClipboard.h"
 
 #include <QDeadlineTimer>
@@ -17,6 +18,33 @@
 
 namespace deskflow {
 namespace {
+class SelectionWatch
+{
+public:
+  QProcess process;
+  bool initialChange = false;
+  explicit SelectionWatch(const QString &paste)
+  {
+    process.setStandardErrorFile(QProcess::nullDevice());
+    // No clipboard data is printed or persisted. Each selection change runs
+    // a fixed printf command, whose output cancels an obsolete file download.
+    process.start(paste, {"--watch", "/usr/bin/printf", "changed\\n"});
+    process.waitForStarted(500);
+    process.waitForReadyRead(200);
+    initialChange = process.readAllStandardOutput().count('\n') > 1;
+  }
+  ~SelectionWatch()
+  {
+    process.kill();
+    process.waitForFinished(500);
+  }
+  bool changed()
+  {
+    process.waitForReadyRead(0);
+    return initialChange || process.state() == QProcess::NotRunning || !process.readAllStandardOutput().isEmpty();
+  }
+};
+
 std::optional<QByteArray> runHelper(
     const QString &program, const QStringList &args, const QByteArray &input, qint64 maxOutput,
     const QDeadlineTimer &deadline
@@ -56,10 +84,13 @@ std::optional<QByteArray> runHelper(
 }
 } // namespace
 
-WaylandClipboard::WaylandClipboard(std::function<void()> changed, QString copyCommand, QString pasteCommand)
+WaylandClipboard::WaylandClipboard(
+    std::function<void()> changed, QString copyCommand, QString pasteCommand, std::unique_ptr<FileTransfer> files
+)
     : m_copyCommand(copyCommand.isEmpty() ? QStandardPaths::findExecutable("wl-copy") : std::move(copyCommand)),
       m_pasteCommand(pasteCommand.isEmpty() ? QStandardPaths::findExecutable("wl-paste") : std::move(pasteCommand)),
-      m_changed(std::move(changed))
+      m_changed(std::move(changed)),
+      m_files(std::move(files))
 {
   if (available())
     m_worker = std::thread([this] { run(); });
@@ -144,11 +175,11 @@ void WaylandClipboard::run()
     std::optional<std::string> selection;
     bool published = false;
     if (write) {
-      published = writeSelection(*write, maxBytes);
+      published = writeSelection(*write, maxBytes, generation);
       if (!published)
         LOG_DEBUG("Wayland clipboard fallback could not publish selection");
     } else {
-      selection = readSelection(maxBytes);
+      selection = readSelection(maxBytes, generation);
     }
 
     lock.lock();
@@ -168,7 +199,13 @@ void WaylandClipboard::run()
   }
 }
 
-std::optional<std::string> WaylandClipboard::readSelection(qint64 maxBytes) const
+bool WaylandClipboard::superseded(uint64_t generation) const
+{
+  std::scoped_lock lock(m_mutex);
+  return m_stopping || generation != m_generation;
+}
+
+std::optional<std::string> WaylandClipboard::readSelection(qint64 maxBytes, uint64_t generation)
 {
   const QDeadlineTimer deadline(kTimeoutMs);
   const auto types = runHelper(m_pasteCommand, {"--list-types"}, {}, 16 * 1024, deadline);
@@ -178,6 +215,42 @@ std::optional<std::string> WaylandClipboard::readSelection(qint64 maxBytes) cons
   Clipboard clipboard;
   clipboard.open(0);
   clipboard.empty();
+  // File-manager selections must be handled before their text/image previews.
+  // Never send another computer's absolute paths as ordinary clipboard text.
+  if (offered.contains("text/uri-list") || offered.contains("x-special/gnome-copied-files")) {
+    const bool gnome = offered.contains("x-special/gnome-copied-files");
+    const auto raw = runHelper(
+        m_pasteCommand, {"--no-newline", "--type", gnome ? "x-special/gnome-copied-files" : "text/uri-list"}, {},
+        FileTransfer::kMaxOfferBytes, deadline
+    );
+    if (!raw)
+      return std::nullopt;
+    auto uris = *raw;
+    if (gnome) {
+      const auto newline = uris.indexOf('\n');
+      if (newline < 0 || (uris.left(newline) != "copy" && uris.left(newline) != "cut"))
+        return std::nullopt;
+      uris.remove(0, newline + 1); // A remote cut is always a copy; never delete source files.
+    }
+    bool hasFiles = gnome;
+    for (const auto &line : uris.split('\n'))
+      hasFiles = hasFiles || line.trimmed().toLower().startsWith("file:");
+    if (hasFiles) {
+      if (!FileTransfer::enabled())
+        return std::nullopt;
+      if (!m_files)
+        m_files = std::make_unique<FileTransfer>();
+      const auto offer =
+          m_files->offer(FileTransfer::pathsFromUris(uris), [this, generation] { return superseded(generation); });
+      if (offer.isEmpty() || offer.size() + 12 > maxBytes)
+        return std::nullopt;
+      clipboard.add(IClipboard::Format::Files, offer.toStdString());
+      clipboard.close();
+      return clipboard.marshall();
+    }
+    // Browsers also offer URI lists for web links and images. Preserve their
+    // normal text/image representations when there are no local file URLs.
+  }
   QSet<IClipboard::Format> seen;
   for (const auto &entry : PortalClipboard::kSupportedMimes) {
     if (seen.contains(entry.format) || !offered.contains(entry.mime))
@@ -207,11 +280,31 @@ std::optional<std::string> WaylandClipboard::readSelection(qint64 maxBytes) cons
   return result;
 }
 
-bool WaylandClipboard::writeSelection(const std::string &data, qint64 maxBytes) const
+bool WaylandClipboard::writeSelection(const std::string &data, qint64 maxBytes, uint64_t generation)
 {
   Clipboard clipboard;
   clipboard.unmarshall(data, 0);
   clipboard.open(0);
+  if (clipboard.has(IClipboard::Format::Files)) {
+    if (!FileTransfer::enabled())
+      return false;
+    if (!m_files)
+      m_files = std::make_unique<FileTransfer>();
+    SelectionWatch watch(m_pasteCommand);
+    bool selectionChanged = false;
+    const auto obsolete = [&] {
+      selectionChanged = selectionChanged || watch.changed();
+      return selectionChanged || superseded(generation) || !FileTransfer::enabled();
+    };
+    const auto paths = m_files->receive(QByteArray::fromStdString(clipboard.get(IClipboard::Format::Files)), obsolete);
+    if (paths.isEmpty() || obsolete())
+      return false;
+    return runHelper(
+               m_copyCommand, {"--type", "text/uri-list"}, FileTransfer::urisFromPaths(paths), 0,
+               QDeadlineTimer(kTimeoutMs)
+    )
+        .has_value();
+  }
   // wl-copy offers one format; prefer PNG for images, otherwise UTF-8 text.
   for (const auto &entry : PortalClipboard::kSupportedMimes) {
     if (!clipboard.has(entry.format))

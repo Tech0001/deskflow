@@ -713,6 +713,16 @@
            </widget>
           </item>
           <item>
+           <widget class="QCheckBox" name="cbShareFiles">
+            <property name="text">
+             <string>Share copied files and folders</string>
+            </property>
+            <property name="toolTip">
+             <string>Copy files between Finder and Nautilus. Enable on both computers; encrypted connections and certificate verification are required. Files are copied, never moved.</string>
+            </property>
+           </widget>
+          </item>
+          <item>
            <spacer name="verticalSpacer_2">
             <property name="orientation">
              <enum>Qt::Orientation::Vertical</enum>

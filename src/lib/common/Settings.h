@@ -102,6 +102,7 @@ public:
     inline static const auto Certificate = QStringLiteral("security/certificate");
     inline static const auto KeySize = QStringLiteral("security/keySize");
     inline static const auto TlsEnabled = QStringLiteral("security/tlsEnabled");
+    inline static const auto ShareFiles = QStringLiteral("security/shareFiles");
   };
   struct Server
   {
@@ -304,6 +305,7 @@ private:
     , Security::CheckPeers
     , Security::KeySize
     , Security::TlsEnabled
+    , Security::ShareFiles
     , Server::ClipboardSize
     , Server::DefaultLockToComputerState
     , Server::DisableLockToComputer
@@ -342,6 +344,7 @@ private:
     , Log::ToFile
     , Log::GuiDebug
     , Server::DefaultLockToComputerState
+    , Security::ShareFiles
     , Server::DisableLockToComputer
     , Server::EnableHeartbeat
     , Server::EnableSwitchDelay

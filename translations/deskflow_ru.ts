@@ -1265,6 +1265,14 @@ Enabling this setting will disable the server config GUI.</source>
         <source>Remove all settings</source>
         <translation type="unfinished">Удалить все настройки</translation>
     </message>
+    <message>
+        <source>Share copied files and folders</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Copy files between Finder and Nautilus. Enable on both computers; encrypted connections and certificate verification are required. Files are copied, never moved.</source>
+        <translation type="unfinished"></translation>
+    </message>
 </context>
 <context>
     <name>SettingsDialogButtonBox</name>

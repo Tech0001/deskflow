@@ -10,6 +10,7 @@
 
 #include "deskflow/PlatformScreen.h"
 #include "platform/OSXClipboard.h"
+#include "platform/OSXFileClipboard.h"
 #include "platform/OSXPowerManager.h"
 
 #include <Carbon/Carbon.h>
@@ -256,6 +257,7 @@ private:
 
   // clipboards
   OSXClipboard m_pasteboard;
+  std::unique_ptr<deskflow::OSXFileClipboard> m_fileClipboard;
   uint32_t m_sequenceNumber;
 
   // screen saver stuff
