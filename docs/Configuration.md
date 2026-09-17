@@ -136,6 +136,15 @@ This section contains options used by the application security it will begin wit
 
 This section contains options used when in server mode it will begin with `[server]`
 
+On Wayland servers using InputCapture version 1, clipboard sharing falls back
+to `wl-copy` and `wl-paste` from the `wl-clipboard` package when built with
+libportal clipboard support. Enable clipboard sharing normally. Local content
+is read when moving to another computer; remote content is published when
+returning. The fallback supports UTF-8 text and PNG images, choosing PNG when
+publishing a selection that also contains text. Transfers respect the configured
+size limit and run in a separate worker with a timeout, so a stalled clipboard
+owner does not block keyboard or mouse forwarding.
+
 |Option              |    Valid Values   |Description|
 |:-------------------|:-----------------:|:-----------|
 | clipboardSize      | int > 0           | Deskflow will send a maximum of `N` megabytes of clipboard data to another computer when the mouse transitions to that computer.|

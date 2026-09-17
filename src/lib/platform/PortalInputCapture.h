@@ -17,14 +17,17 @@
 #include <libportal/inputcapture.h>
 #include <libportal/portal.h>
 
+#include <atomic>
 #include <cstdint>
 #include <map>
+#include <memory>
 #include <utility>
 #include <vector>
 
 namespace deskflow {
 
 class EiClipboard;
+class WaylandClipboard;
 
 class PortalInputCapture
 {
@@ -33,7 +36,9 @@ public:
   ~PortalInputCapture();
 
   // Get the clipboard for the specified ID
-  EiClipboard *getClipboard(ClipboardID id) const;
+  bool getClipboard(ClipboardID id, IClipboard *target) const;
+  bool setClipboard(ClipboardID id, const IClipboard *source);
+  void checkClipboards();
   void enable();
   void disable();
   void release();
@@ -172,6 +177,10 @@ private:
   std::vector<BarrierInfo> m_barrierInfo;
 
   EiClipboard *m_clipboard = nullptr;
+#ifdef HAVE_LIBPORTAL_CLIPBOARD
+  std::unique_ptr<WaylandClipboard> m_waylandClipboard;
+  std::atomic<bool> m_useClipboardFallback = false;
+#endif
 };
 
 } // namespace deskflow

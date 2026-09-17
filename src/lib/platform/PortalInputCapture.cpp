@@ -17,6 +17,7 @@
 
 #ifdef HAVE_LIBPORTAL_CLIPBOARD
 #include "platform/PortalClipboard.h"
+#include "platform/WaylandClipboard.h"
 #endif
 
 #include <algorithm>
@@ -174,6 +175,11 @@ PortalInputCapture::PortalInputCapture(EiScreen *screen, IEventQueue *events)
 {
   // Create clipboard for primary clipboard ID
   m_clipboard = new EiClipboard(kClipboardClipboard);
+#ifdef HAVE_LIBPORTAL_CLIPBOARD
+  m_waylandClipboard = std::make_unique<WaylandClipboard>([this] {
+    m_screen->sendClipboardEvent(EventTypes::ClipboardGrabbed, kClipboardClipboard);
+  });
+#endif
 
   m_glibMainLoop = g_main_loop_new(nullptr, true);
 
@@ -220,16 +226,40 @@ PortalInputCapture::~PortalInputCapture()
   m_barriers.clear();
   g_object_unref(m_portal);
 
+#ifdef HAVE_LIBPORTAL_CLIPBOARD
+  m_waylandClipboard.reset();
+#endif
   delete m_clipboard;
 }
 
-EiClipboard *PortalInputCapture::getClipboard(ClipboardID id) const
+bool PortalInputCapture::getClipboard(ClipboardID id, IClipboard *target) const
 {
-  // Currently only supporting primary clipboard
-  if (id == kClipboardClipboard) {
-    return m_clipboard;
-  }
-  return nullptr;
+  if (id != kClipboardClipboard || !Settings::value(Settings::Server::EnableClipboard).toBool())
+    return false;
+#ifdef HAVE_LIBPORTAL_CLIPBOARD
+  if (m_useClipboardFallback)
+    return m_waylandClipboard->copyTo(target);
+#endif
+  return IClipboard::copy(target, m_clipboard);
+}
+
+bool PortalInputCapture::setClipboard(ClipboardID id, const IClipboard *source)
+{
+  if (id != kClipboardClipboard || !Settings::value(Settings::Server::EnableClipboard).toBool())
+    return false;
+#ifdef HAVE_LIBPORTAL_CLIPBOARD
+  if (m_useClipboardFallback)
+    return m_waylandClipboard->setClipboard(source, static_cast<qint64>(m_screen->maximumClipboardSize()) * 1024);
+#endif
+  return IClipboard::copy(m_clipboard, source);
+}
+
+void PortalInputCapture::checkClipboards()
+{
+#ifdef HAVE_LIBPORTAL_CLIPBOARD
+  if (m_useClipboardFallback && Settings::value(Settings::Server::EnableClipboard).toBool())
+    m_waylandClipboard->requestRead(static_cast<qint64>(m_screen->maximumClipboardSize()) * 1024);
+#endif
 }
 
 gboolean PortalInputCapture::timeoutHandler() const
@@ -315,6 +345,19 @@ void PortalInputCapture::setupSession(XdpInputCaptureSession *session)
       g_idle_add([](gpointer data) { return static_cast<PortalInputCapture *>(data)->initSession(); }, this);
       return;
     }
+  }
+#endif
+
+  // Some compositors provide InputCapture but no Clipboard portal at all.
+  // Keep their clipboard I/O independent from input forwarding.
+#ifdef HAVE_LIBPORTAL_CLIPBOARD
+  if (m_portalVersion <= 1 && Settings::value(Settings::Server::EnableClipboard).toBool() &&
+      !xdp_session_is_clipboard_enabled(parentSession)) {
+    m_useClipboardFallback = m_waylandClipboard->available();
+    if (m_useClipboardFallback)
+      LOG_INFO("Clipboard portal unavailable; using wl-clipboard fallback");
+    else
+      LOG_WARN("Clipboard portal unavailable; install wl-clipboard to enable copy/paste");
   }
 #endif
 
@@ -744,6 +787,10 @@ void PortalInputCapture::handleActivated(
 
 #ifdef HAVE_LIBPORTAL_CLIPBOARD
   if (!Settings::value(Settings::Server::EnableClipboard).toBool())
+    return;
+  // Screen::leave() requests a fresh fallback read. Its completion delivers
+  // ClipboardGrabbed once actual data is ready, without blocking this callback.
+  if (m_useClipboardFallback)
     return;
   if (m_session) {
     LOG_DEBUG("reading clipboard selection on activation");

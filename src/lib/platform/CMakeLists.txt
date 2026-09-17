@@ -166,6 +166,8 @@ elseif(UNIX)
         list(APPEND PLATFORM_SOURCES
           PortalClipboard.cpp
           PortalClipboard.h
+          WaylandClipboard.cpp
+          WaylandClipboard.h
         )
       endif()
       if(HAVE_LP_SHORTCUTS)

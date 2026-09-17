@@ -189,13 +189,8 @@ void *EiScreen::getEventTarget() const
 bool EiScreen::getClipboard(ClipboardID id, IClipboard *clipboard) const
 {
   // If using portal input capture, get clipboard from there
-  if (m_portalInputCapture) {
-    const auto sourceClipboard = m_portalInputCapture->getClipboard(id);
-    if (!sourceClipboard) {
-      return false;
-    }
-    return IClipboard::copy(clipboard, sourceClipboard);
-  }
+  if (m_portalInputCapture)
+    return m_portalInputCapture->getClipboard(id, clipboard);
 
   // Otherwise use our own clipboard
   if (!m_clipboard) {
@@ -500,13 +495,8 @@ bool EiScreen::setClipboard(ClipboardID id, const IClipboard *clipboard)
   }
 
   // If using portal input capture, set clipboard there
-  if (m_portalInputCapture) {
-    IClipboard *targetClipboard = m_portalInputCapture->getClipboard(id);
-    if (!targetClipboard) {
-      return false;
-    }
-    return IClipboard::copy(targetClipboard, clipboard);
-  }
+  if (m_portalInputCapture)
+    return m_portalInputCapture->setClipboard(id, clipboard);
 
   // Otherwise use our own clipboard
   if (!m_clipboard) {
@@ -524,9 +514,8 @@ bool EiScreen::setClipboard(ClipboardID id, const IClipboard *clipboard)
 
 void EiScreen::checkClipboards()
 {
-  // For portal-based input capture, clipboard changes come via portal events
-  // For socket-based, clipboard is passive and changes are sent explicitly
-  // Nothing to do here
+  if (m_portalInputCapture)
+    m_portalInputCapture->checkClipboards();
 }
 
 void EiScreen::openScreensaver(bool notify)
