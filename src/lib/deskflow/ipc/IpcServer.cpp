@@ -63,15 +63,11 @@ void IpcServer::handleReadyRead()
   const auto clientSocket = qobject_cast<QLocalSocket *>(sender());
   LOG_VERBOSE("%s ipc server ready to read data", m_typeName.constData());
 
-  QByteArray data = clientSocket->readAll();
-  if (data.isEmpty()) {
-    LOG_WARN("%s ipc server got empty message", m_typeName.constData());
-    return;
-  }
-
-  // we don't handle incomplete messages yet; each socket read must have delimiters.
-  if (!data.contains('\n')) {
-    LOG_WARN("%s ipc server got incomplete message: %s", m_typeName.constData(), data.constData());
+  auto &data = m_readBuffers[clientSocket];
+  data += clientSocket->readAll();
+  if (data.size() > 1024 * 1024) {
+    data.clear();
+    clientSocket->disconnectFromServer();
     return;
   }
 
@@ -90,6 +86,7 @@ void IpcServer::handleDisconnected()
   const auto clientSocket = qobject_cast<QLocalSocket *>(sender());
   LOG_DEBUG("%s ipc server client disconnected", m_typeName.constData());
   m_clients.remove(clientSocket);
+  m_readBuffers.remove(clientSocket);
   clientSocket->deleteLater();
 }
 
@@ -103,6 +100,7 @@ void IpcServer::handleErrorOccurred()
   }
 
   m_clients.remove(clientSocket);
+  m_readBuffers.remove(clientSocket);
   clientSocket->deleteLater();
 }
 
@@ -161,6 +159,9 @@ void IpcServer::processMessage(QLocalSocket *clientSocket, const QString &messag
 
 void IpcServer::broadcastCommand(const QString &command, const QString &args)
 {
+  // Progress is transient and periodic; do not queue it without a GUI.
+  if (command == "fileTransfer" && m_clients.isEmpty())
+    return;
   const auto message = args.isEmpty() ? command : QStringLiteral("%1=%2").arg(command, args);
 
   if (m_clients.isEmpty()) {

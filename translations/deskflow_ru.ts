@@ -373,6 +373,27 @@ Do you want to connect to the server?
         <translation>Текущий ключ TLS меньше минимально допустимого размера. Будет создан новый 2048-битный ключ.</translation>
     </message>
     <message>
+        <source>Receiving file</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Could not receive %1. Check the other computer and try Paste again.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation type="unfinished">Закрывать</translation>
+    </message>
+    <message>
+        <source>%1
+%2 of %3 MiB</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>invalid certificate, generating a new one</source>
         <translation>недействительный сертификат, создание нового</translation>
     </message>

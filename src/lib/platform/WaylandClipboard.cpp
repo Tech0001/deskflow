@@ -9,6 +9,7 @@
 #include "base/Log.h"
 #include "deskflow/Clipboard.h"
 #include "platform/FileTransfer.h"
+#include "platform/LazyFileClipboard.h"
 #include "platform/PortalClipboard.h"
 
 #include <QDeadlineTimer>
@@ -18,33 +19,6 @@
 
 namespace deskflow {
 namespace {
-class SelectionWatch
-{
-public:
-  QProcess process;
-  bool initialChange = false;
-  explicit SelectionWatch(const QString &paste)
-  {
-    process.setStandardErrorFile(QProcess::nullDevice());
-    // No clipboard data is printed or persisted. Each selection change runs
-    // a fixed printf command, whose output cancels an obsolete file download.
-    process.start(paste, {"--watch", "/usr/bin/printf", "changed\\n"});
-    process.waitForStarted(500);
-    process.waitForReadyRead(200);
-    initialChange = process.readAllStandardOutput().count('\n') > 1;
-  }
-  ~SelectionWatch()
-  {
-    process.kill();
-    process.waitForFinished(500);
-  }
-  bool changed()
-  {
-    process.waitForReadyRead(0);
-    return initialChange || process.state() == QProcess::NotRunning || !process.readAllStandardOutput().isEmpty();
-  }
-};
-
 std::optional<QByteArray> runHelper(
     const QString &program, const QStringList &args, const QByteArray &input, qint64 maxOutput,
     const QDeadlineTimer &deadline
@@ -54,6 +28,7 @@ std::optional<QByteArray> runHelper(
     return std::nullopt;
 
   QProcess process;
+  process.setUnixProcessParameters(QProcess::UnixProcessFlag::CloseFileDescriptors);
   process.setStandardErrorFile(QProcess::nullDevice());
   process.start(program, args);
   if (!process.waitForStarted(static_cast<int>(deadline.remainingTime())))
@@ -240,8 +215,10 @@ std::optional<std::string> WaylandClipboard::readSelection(qint64 maxBytes, uint
         return std::nullopt;
       if (!m_files)
         m_files = std::make_unique<FileTransfer>();
-      const auto offer =
-          m_files->offer(FileTransfer::pathsFromUris(uris), [this, generation] { return superseded(generation); });
+      const auto paths = FileTransfer::pathsFromUris(uris);
+      auto offer = m_lazyFiles ? m_lazyFiles->offerForPaths(paths) : QByteArray();
+      if (offer.isEmpty())
+        offer = m_files->offer(paths, [this, generation] { return superseded(generation); });
       if (offer.isEmpty() || offer.size() + 12 > maxBytes)
         return std::nullopt;
       clipboard.add(IClipboard::Format::Files, offer.toStdString());
@@ -290,14 +267,19 @@ bool WaylandClipboard::writeSelection(const std::string &data, qint64 maxBytes, 
       return false;
     if (!m_files)
       m_files = std::make_unique<FileTransfer>();
-    SelectionWatch watch(m_pasteCommand);
-    bool selectionChanged = false;
-    const auto obsolete = [&] {
-      selectionChanged = selectionChanged || watch.changed();
-      return selectionChanged || superseded(generation) || !FileTransfer::enabled();
-    };
-    const auto paths = m_files->receive(QByteArray::fromStdString(clipboard.get(IClipboard::Format::Files)), obsolete);
-    if (paths.isEmpty() || obsolete())
+    const auto offer = QByteArray::fromStdString(clipboard.get(IClipboard::Format::Files));
+    auto paths = m_files->localPaths(offer);
+    if (paths.isEmpty()) {
+      if (!m_lazyFiles)
+        m_lazyFiles = std::make_unique<LazyFileClipboard>(*m_files);
+      paths = m_lazyFiles->publish(offer);
+    }
+    if (paths.isEmpty()) {
+      // Clear the stale selection even when the filesystem cannot be mounted.
+      runHelper(m_copyCommand, {"--clear"}, {}, 0, QDeadlineTimer(kTimeoutMs));
+      return false;
+    }
+    if (superseded(generation))
       return false;
     return runHelper(
                m_copyCommand, {"--type", "text/uri-list"}, FileTransfer::urisFromPaths(paths), 0,

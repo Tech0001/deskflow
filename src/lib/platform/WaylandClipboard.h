@@ -19,6 +19,7 @@
 #include <thread>
 
 namespace deskflow {
+class LazyFileClipboard;
 
 // Fallback for compositors without the Clipboard portal. Clipboard helpers
 // run on a worker with bounded I/O; input forwarding only accesses the cache.
@@ -58,6 +59,7 @@ private:
   qint64 m_maxBytes = 0;
   uint64_t m_generation = 0;
   std::unique_ptr<FileTransfer> m_files;
+  std::unique_ptr<LazyFileClipboard> m_lazyFiles;
 };
 
 } // namespace deskflow

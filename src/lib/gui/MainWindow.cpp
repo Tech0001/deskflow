@@ -36,6 +36,8 @@
 #include <QCloseEvent>
 #include <QDesktopServices>
 #include <QFileDialog>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QLocalServer>
 #include <QLocalSocket>
 #include <QMenu>
@@ -43,6 +45,7 @@
 #include <QMessageBox>
 #include <QNetworkAccessManager>
 #include <QNetworkInterface>
+#include <QProgressDialog>
 #include <QPushButton>
 #include <QRegularExpression>
 #include <QRegularExpressionValidator>
@@ -240,6 +243,56 @@ void MainWindow::setupControls()
 // signal is emitted from the thread that owns the receiver's object.
 void MainWindow::connectSlots()
 {
+  connect(&m_coreProcess, &CoreProcess::fileTransferProgress, this, [this](const QString &payload) {
+    const auto data =
+        QJsonDocument::fromJson(QByteArray::fromBase64(payload.toLatin1(), QByteArray::Base64UrlEncoding)).object();
+    const auto id = data["id"].toString();
+    const auto state = data["state"].toString();
+    if (id.isEmpty())
+      return;
+    auto dialog = m_fileTransfers.value(id);
+    if (state == "complete" || state == "cancelled") {
+      if (dialog)
+        dialog->deleteLater();
+      m_fileTransfers.remove(id);
+      return;
+    }
+    if (!dialog) {
+      dialog = new QProgressDialog(this);
+      dialog->setWindowTitle(tr("Receiving file"));
+      dialog->setWindowModality(Qt::NonModal);
+      dialog->setAttribute(Qt::WA_ShowWithoutActivating);
+      dialog->setAutoClose(false);
+      dialog->setAutoReset(false);
+      dialog->setMinimumDuration(0);
+      dialog->setCancelButtonText(tr("Cancel"));
+      m_fileTransfers[id] = dialog;
+      connect(dialog, &QProgressDialog::canceled, this, [this, id] {
+        m_coreProcess.cancelFileTransfer(id);
+        if (auto finished = m_fileTransfers.take(id))
+          finished->deleteLater();
+      });
+    }
+    if (state == "failed") {
+      dialog->setRange(0, 1);
+      dialog->setValue(0);
+      dialog->setLabelText(
+          tr("Could not receive %1. Check the other computer and try Paste again.").arg(data["name"].toString())
+      );
+      dialog->setCancelButtonText(tr("Close"));
+    } else {
+      dialog->setCancelButtonText(tr("Cancel"));
+      const auto done = data["done"].toString().toLongLong();
+      const auto total = data["total"].toString().toLongLong();
+      dialog->setLabelText(tr("%1\n%2 of %3 MiB")
+                               .arg(data["name"].toString())
+                               .arg(done / 1048576.0, 0, 'f', 1)
+                               .arg(total / 1048576.0, 0, 'f', 1));
+      dialog->setRange(0, total > 0 ? 1000 : 0);
+      dialog->setValue(total > 0 ? static_cast<int>(done * 1000 / total) : 0);
+    }
+    dialog->show();
+  });
   connect(Settings::instance(), &Settings::serverSettingsChanged, this, &MainWindow::serverConfigSaving);
   connect(Settings::instance(), &Settings::settingsChanged, this, &MainWindow::settingsChanged);
 
@@ -952,6 +1005,12 @@ void MainWindow::updateStatus()
 void MainWindow::coreProcessStateChanged(ProcessState state)
 {
   using enum ProcessState;
+  if (state == Stopped) {
+    for (const auto &dialog : std::as_const(m_fileTransfers))
+      if (dialog)
+        dialog->deleteLater();
+    m_fileTransfers.clear();
+  }
   updateStatus();
   if (state == Started) {
     qDebug() << "recording that core has started";

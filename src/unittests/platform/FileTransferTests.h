@@ -20,6 +20,10 @@ private Q_SLOTS:
   void rejectChangedSource();
   void rejectCertificateAndToken();
   void cancellationDiscardsStaging();
+  void metadataOnlyOffer();
+  void individualFileCancellationRetryAndCache();
+  void sourceChangesDuringTransfer();
+  void helperReceivesVerifiedFile();
 
 private:
   void write(const QString &path, const QByteArray &bytes);

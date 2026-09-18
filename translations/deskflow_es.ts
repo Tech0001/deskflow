@@ -417,6 +417,27 @@ Do you want to connect to the server?
         <translation type="unfinished">Su clave TLS actual es más pequeña que el tamaño mínimo permitido. Se generará una nueva clave de 2048 bits.</translation>
     </message>
     <message>
+        <source>Receiving file</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Could not receive %1. Check the other computer and try Paste again.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation type="unfinished">Cerca</translation>
+    </message>
+    <message>
+        <source>%1
+%2 of %3 MiB</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Address missing</source>
         <translation type="unfinished">Dirección faltante</translation>
     </message>

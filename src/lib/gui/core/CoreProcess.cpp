@@ -621,7 +621,9 @@ void CoreProcess::setProcessState(ProcessState state)
 
 void CoreProcess::onCoreIpcMessageReceived(const QString &command, const QString &args)
 {
-  if (command == "connectionState") {
+  if (command == "fileTransfer") {
+    Q_EMIT fileTransferProgress(args);
+  } else if (command == "connectionState") {
     const auto metaEnum = QMetaEnum::fromType<ConnectionState>();
     bool ok = false;
     const auto state = static_cast<ConnectionState>(metaEnum.keyToValue(args.toUtf8().constData(), &ok));
@@ -658,6 +660,12 @@ void CoreProcess::onCoreIpcMessageReceived(const QString &command, const QString
   } else if (command == "missingKeyboardLayouts") {
     Q_EMIT missingKeyboardLayouts(args);
   }
+}
+
+void CoreProcess::cancelFileTransfer(const QString &id)
+{
+  if (m_coreIpcClient)
+    m_coreIpcClient->cancelFileTransfer(id);
 }
 
 bool CoreProcess::checkSecureSocket(const QString &line)

@@ -333,12 +333,18 @@ void WaylandClipboardTests::copiedFilesRoundTrip()
     QCOMPARE(readFile("args"), QByteArray("--type\ntext/uri-list"));
     const auto paths = deskflow::FileTransfer::pathsFromUris(readFile("output"));
     QCOMPARE(paths.size(), 1);
+    // Publishing and stat/open of the virtual file must not start a download.
+    QVERIFY(QDir(m_dir.filePath("writer-cache")).entryList(QDir::Dirs | QDir::NoDotAndDotDot).isEmpty());
+    QCOMPARE(QFileInfo(paths[0]).size(), 19);
     QFile file(paths[0]);
     QVERIFY(file.open(QIODevice::ReadOnly));
+    QVERIFY(QDir(m_dir.filePath("writer-cache")).entryList(QDir::Dirs | QDir::NoDotAndDotDot).isEmpty());
     QCOMPARE(file.readAll(), QByteArray("real file contents\n"));
-    const auto parent = QFileInfo(paths[0]).dir();
-    QVERIFY(parent.dirName().startsWith("transfer-"));
-    QDir(parent).removeRecursively();
+    QCOMPARE(QDir(m_dir.filePath("writer-cache")).entryList({"transfer-*"}, QDir::Dirs).size(), 1);
+    file.close();
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    QCOMPARE(file.readAll(), QByteArray("real file contents\n"));
+    QCOMPARE(QDir(m_dir.filePath("writer-cache")).entryList({"transfer-*"}, QDir::Dirs).size(), 1);
   }
   Settings::setValue(Settings::Security::ShareFiles, false);
 }

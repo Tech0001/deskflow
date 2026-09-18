@@ -405,6 +405,27 @@ Vuoi connetterti al server?
         <translation>La tua chiave TLS attuale è più piccola della dimensione minima consentita. Verrà generata una nuova chiave a 2048 bit.</translation>
     </message>
     <message>
+        <source>Receiving file</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Could not receive %1. Check the other computer and try Paste again.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation type="unfinished">Vicino</translation>
+    </message>
+    <message>
+        <source>%1
+%2 of %3 MiB</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Address missing</source>
         <translation>Indirizzo mancante</translation>
     </message>

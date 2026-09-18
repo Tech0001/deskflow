@@ -4,6 +4,7 @@
 # SPDX-License-Identifier: MIT
 
 if(UNIX AND NOT APPLE)
+  pkg_check_modules(FUSE3 REQUIRED IMPORTED_TARGET fuse3>=3.10)
   pkg_check_modules(LIBEI REQUIRED QUIET "libei-1.0 >= ${REQUIRED_LIBEI_VERSION}")
   message(STATUS "libei version: ${LIBEI_VERSION}")
 
@@ -170,6 +171,8 @@ elseif(UNIX)
           PortalClipboard.h
           WaylandClipboard.cpp
           WaylandClipboard.h
+          LazyFileClipboard.cpp
+          LazyFileClipboard.h
         )
       endif()
       if(HAVE_LP_SHORTCUTS)
@@ -198,6 +201,7 @@ if(UNIX)
     find_library(COCOA_LIBRARY Cocoa)
     target_link_libraries(platform PUBLIC ${COCOA_LIBRARY})
   else()
+    target_link_libraries(platform PRIVATE PkgConfig::FUSE3)
     if(${LIBXKBCOMMON_VERSION} VERSION_GREATER_EQUAL "1.10")
       target_compile_definitions(platform PRIVATE HAVE_XKB_KEYMAP_MOD_GET_MASK=1)
     endif()

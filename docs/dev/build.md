@@ -6,6 +6,7 @@ To build Deskflow you will a minimum of:
     - [openssl] 3.0+
     - [libportal] 0.9.1+ (linux, bsd)
     - [libei] 1.3+ (linux, bsd)
+    - libfuse3 3.10+ (Linux/BSD file clipboard; FUSE device access for integration tests)
 
 > ^ Will be fetched if not found on the host system.
 

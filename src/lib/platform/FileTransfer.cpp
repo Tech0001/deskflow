@@ -36,8 +36,10 @@
 #include <atomic>
 #include <condition_variable>
 #include <deque>
+#include <map>
 #include <mutex>
 #include <thread>
+#include <vector>
 
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -110,23 +112,81 @@ bool openRegular(QFile &file, const QString &path)
   return true;
 }
 
-struct Entry
+QByteArray revision(const struct stat &st)
+{
+#ifdef Q_OS_MACOS
+  const auto mt = st.st_mtimespec;
+  const auto ct = st.st_ctimespec;
+#else
+  const auto mt = st.st_mtim;
+  const auto ct = st.st_ctim;
+#endif
+  const auto metadata = QByteArray::number(st.st_dev) + ':' + QByteArray::number(st.st_ino) + ':' +
+                        QByteArray::number(st.st_size) + ':' + QByteArray::number(mt.tv_sec) + ':' +
+                        QByteArray::number(mt.tv_nsec) + ':' + QByteArray::number(ct.tv_sec) + ':' +
+                        QByteArray::number(ct.tv_nsec);
+  return QCryptographicHash::hash(metadata, QCryptographicHash::Sha256);
+}
+
+QByteArray revision(QFile &file)
+{
+  struct stat st{};
+  return ::fstat(file.handle(), &st) == 0 ? revision(st) : QByteArray();
+}
+
+bool statRegular(const QString &path, struct stat &st)
+{
+  const auto parts = path.split('/', Qt::SkipEmptyParts);
+  if (!path.startsWith('/') || parts.isEmpty())
+    return false;
+  int fd = ::open("/", O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+  for (int i = 0; fd >= 0 && i + 1 < parts.size(); ++i) {
+    const auto name = QFile::encodeName(parts[i]);
+    const int next = ::openat(fd, name.constData(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC);
+    ::close(fd);
+    fd = next;
+  }
+  if (fd < 0)
+    return false;
+  const auto name = QFile::encodeName(parts.last());
+  const bool ok = ::fstatat(fd, name.constData(), &st, AT_SYMLINK_NOFOLLOW) == 0 && S_ISREG(st.st_mode);
+  ::close(fd);
+  return ok;
+}
+
+std::mutex progressMutex;
+FileTransfer::ProgressHandler progressHandler;
+std::map<QString, std::weak_ptr<std::atomic<bool>>> activeTransfers;
+void report(const QString &id, const QString &name, qint64 done, qint64 total, const QString &state)
+{
+  FileTransfer::ProgressHandler handler;
+  {
+    std::scoped_lock lock(progressMutex);
+    handler = progressHandler;
+  }
+  if (handler)
+    handler(id, name, done, total, state);
+}
+
+struct TransferEntry
 {
   QString path;
   QString source;
   bool directory = false;
   qint64 size = 0;
   QByteArray digest;
+  QByteArray revision;
 };
 
 struct Offer
 {
+  int version = 2;
   QString token;
   QStringList addresses;
   quint16 port = 0;
   QByteArray fingerprint;
   qint64 expires = 0;
-  QList<Entry> entries;
+  QList<TransferEntry> entries;
   QStringList roots;
   qint64 total = 0;
 };
@@ -139,7 +199,9 @@ bool decode(const QByteArray &bytes, Offer &offer)
   if (!doc.isObject())
     return false;
   const auto o = doc.object();
-  if (o["version"].toInt() != 1 || !hex(o["token"].toString(), 64) || !hex(o["fingerprint"].toString(), 64))
+  offer.version = o["version"].toInt();
+  if ((offer.version != 1 && offer.version != 2) || !hex(o["token"].toString(), 64) ||
+      !hex(o["fingerprint"].toString(), 64))
     return false;
   offer.token = o["token"].toString();
   offer.fingerprint = QByteArray::fromHex(o["fingerprint"].toString().toLatin1());
@@ -171,7 +233,7 @@ bool decode(const QByteArray &bytes, Offer &offer)
     if (!value.isObject())
       return false;
     const auto e = value.toObject();
-    Entry entry;
+    TransferEntry entry;
     entry.path = e["path"].toString();
     if (!safePath(entry.path) || !e["directory"].isBool())
       return false;
@@ -192,9 +254,10 @@ bool decode(const QByteArray &bytes, Offer &offer)
         return false;
       directories.insert(key);
     } else {
-      if (!hex(e["sha256"].toString(), 64))
+      if (!hex(e[offer.version == 1 ? "sha256" : "revision"].toString(), 64))
         return false;
       entry.digest = QByteArray::fromHex(e["sha256"].toString().toLatin1());
+      entry.revision = QByteArray::fromHex(e["revision"].toString().toLatin1());
     }
     if (slash < 0)
       offer.roots.append(entry.path);
@@ -212,13 +275,14 @@ QByteArray encode(const Offer &offer)
             {"path", e.path},
             {"directory", e.directory},
             {"size", QString::number(e.size)},
-            {"sha256", QString::fromLatin1(e.digest.toHex())}
+            {offer.version == 1 ? "sha256" : "revision",
+             QString::fromLatin1(offer.version == 1 ? e.digest.toHex() : e.revision.toHex())}
         }
     );
   }
   return QJsonDocument(
              QJsonObject{
-                 {"version", 1},
+                 {"version", offer.version},
                  {"token", offer.token},
                  {"addresses", QJsonArray::fromStringList(offer.addresses)},
                  {"port", offer.port},
@@ -290,14 +354,19 @@ struct FileTransfer::Impl
   QByteArray lastOffer;
   QStringList lastPaths;
   QHash<QByteArray, QStringList> received;
+  std::mutex receiveMutex;
+  QHash<QByteArray, QString> receivedFiles;
 
-  Impl(QString cert, quint16 requested, QString root, QStringList hosts)
+  Impl(QString cert, quint16 requested, QString root, QStringList hosts, bool listen)
       : certificatePath(std::move(cert)),
         requestedPort(requested),
         cacheRoot(std::move(root)),
         addresses(std::move(hosts))
   {
-    server = std::thread([this] { serve(); });
+    if (listen)
+      server = std::thread([this] { serve(); });
+    else
+      initialized = true;
   }
 
   ~Impl()
@@ -334,78 +403,117 @@ struct FileTransfer::Impl
       return;
     }
     LOG_INFO("file clipboard TLS listener ready on TCP port %u", port);
+    struct Connection
+    {
+      std::thread thread;
+      std::shared_ptr<std::atomic<bool>> done;
+    };
+    std::vector<Connection> connections;
     while (!stopping) {
+      for (auto it = connections.begin(); it != connections.end();) {
+        if (*it->done) {
+          it->thread.join();
+          it = connections.erase(it);
+        } else {
+          ++it;
+        }
+      }
       if (listener.descriptors.empty())
         listener.waitForNewConnection(100);
       if (listener.descriptors.empty())
         continue;
       const auto fd = listener.descriptors.front();
       listener.descriptors.pop_front();
-      QSslSocket socket;
-      if (!socket.setSocketDescriptor(fd)) {
+      if (connections.size() >= 4) {
         ::close(static_cast<int>(fd));
         continue;
       }
-      socket.setReadBufferSize(4096);
-      socket.setLocalCertificate(certificate);
-      socket.setPrivateKey(key);
-      socket.setPeerVerifyMode(QSslSocket::VerifyNone); // The unguessable offer token authorizes reads.
-      socket.setProtocol(QSsl::TlsV1_2OrLater);
-      socket.startServerEncryption();
-      const auto stop = [this] { return stopping.load(); };
-      if (!waitEncrypted(socket, stop))
-        continue;
-      const auto request = readLine(socket, 128, stop).trimmed().split(' ');
-      Entry entry;
-      bool found = false;
-      if (request.size() == 3 && request[0] == "DFT1") {
-        bool ok = false;
-        const int index = request[2].toInt(&ok);
-        std::scoped_lock lock(mutex);
-        for (const auto &offer : offers) {
-          if (ok && offer.token.toLatin1() == request[1] && offer.expires > QDateTime::currentMSecsSinceEpoch() &&
-              index >= 0 && index < offer.entries.size() && !offer.entries[index].directory) {
-            entry = offer.entries[index];
-            found = true;
-            break;
-          }
-        }
-      }
-      QFile file;
-      if (!found || !openRegular(file, entry.source) || file.size() != entry.size) {
-        socket.write("ERROR\n");
-        socket.waitForBytesWritten(100);
-        continue;
-      }
-      socket.write("OK " + QByteArray::number(entry.size) + '\n');
-      qint64 left = entry.size;
-      QDeadlineTimer idle(kIdleTimeout);
-      while (left > 0 && !stopping && socket.state() == QAbstractSocket::ConnectedState) {
-        if (socket.bytesToWrite() + socket.encryptedBytesToWrite() > kBlock * 2) {
-          if (socket.waitForBytesWritten(100))
-            idle = QDeadlineTimer(kIdleTimeout);
-          if (idle.hasExpired())
-            break;
-          continue;
-        }
-        const auto block = file.read(qMin(kBlock, left));
-        if (block.isEmpty() || socket.write(block) != block.size())
+      auto done = std::make_shared<std::atomic<bool>>(false);
+      connections.push_back(
+          {std::thread([this, fd, certificate, key, done] {
+             serveConnection(fd, certificate, key);
+             *done = true;
+           }),
+           done}
+      );
+    }
+    for (auto &connection : connections)
+      connection.thread.join();
+  }
+
+  void serveConnection(qintptr fd, const QSslCertificate &certificate, const QSslKey &key)
+  {
+
+    QSslSocket socket;
+    if (!socket.setSocketDescriptor(fd)) {
+      ::close(static_cast<int>(fd));
+      return;
+    }
+    socket.setReadBufferSize(4096);
+    socket.setLocalCertificate(certificate);
+    socket.setPrivateKey(key);
+    socket.setPeerVerifyMode(QSslSocket::VerifyNone); // The unguessable offer token authorizes reads.
+    socket.setProtocol(QSsl::TlsV1_2OrLater);
+    socket.startServerEncryption();
+    const auto stop = [this] { return stopping.load() || (requestedPort == kPort && !FileTransfer::enabled()); };
+    if (!waitEncrypted(socket, stop))
+      return;
+    const auto request = readLine(socket, 128, stop).trimmed().split(' ');
+    TransferEntry entry;
+    bool found = false;
+    if (request.size() == 3 && (request[0] == "DFT1" || request[0] == "DFT2")) {
+      bool ok = false;
+      const int index = request[2].toInt(&ok);
+      std::scoped_lock lock(mutex);
+      for (const auto &offer : offers) {
+        if (ok && offer.token.toLatin1() == request[1] && offer.expires > QDateTime::currentMSecsSinceEpoch() &&
+            index >= 0 && index < offer.entries.size() && !offer.entries[index].directory &&
+            request[0] == (offer.version == 2 ? "DFT2" : "DFT1")) {
+          entry = offer.entries[index];
+          found = true;
           break;
-        left -= block.size();
-        idle = QDeadlineTimer(kIdleTimeout);
+        }
       }
-      while (!stopping && socket.bytesToWrite() + socket.encryptedBytesToWrite() > 0 && !idle.hasExpired()) {
+    }
+    QFile file;
+    if (!found || !openRegular(file, entry.source) || file.size() != entry.size ||
+        (!entry.revision.isEmpty() && revision(file) != entry.revision)) {
+      socket.write("ERROR\n");
+      socket.waitForBytesWritten(100);
+      return;
+    }
+    socket.write("OK " + QByteArray::number(entry.size) + '\n');
+    QCryptographicHash streamedHash(QCryptographicHash::Sha256);
+    qint64 left = entry.size;
+    QDeadlineTimer idle(kIdleTimeout);
+    while (left > 0 && !stop() && socket.state() == QAbstractSocket::ConnectedState) {
+      if (socket.bytesToWrite() + socket.encryptedBytesToWrite() > kBlock * 2) {
         if (socket.waitForBytesWritten(100))
           idle = QDeadlineTimer(kIdleTimeout);
+        if (idle.hasExpired())
+          break;
+        continue;
       }
-      socket.disconnectFromHost();
-      while (!stopping && socket.state() != QAbstractSocket::UnconnectedState && !idle.hasExpired())
-        socket.waitForDisconnected(100);
+      const auto block = file.read(qMin(kBlock, left));
+      if (block.isEmpty() || socket.write(block) != block.size())
+        break;
+      streamedHash.addData(block);
+      left -= block.size();
+      idle = QDeadlineTimer(kIdleTimeout);
     }
+    if (request[0] == "DFT2" && left == 0 && !stop() && revision(file) == entry.revision)
+      socket.write("SHA256 " + streamedHash.result().toHex() + '\n');
+    while (!stop() && socket.bytesToWrite() + socket.encryptedBytesToWrite() > 0 && !idle.hasExpired()) {
+      if (socket.waitForBytesWritten(100))
+        idle = QDeadlineTimer(kIdleTimeout);
+    }
+    socket.disconnectFromHost();
+    while (!stop() && socket.state() != QAbstractSocket::UnconnectedState && !idle.hasExpired())
+      socket.waitForDisconnected(100);
   }
 };
 
-FileTransfer::FileTransfer(QString certificate, quint16 port, QString cacheRoot, QStringList addresses)
+FileTransfer::FileTransfer(QString certificate, quint16 port, QString cacheRoot, QStringList addresses, bool listen)
 {
   if (certificate.isEmpty())
     certificate = Settings::value(Settings::Security::Certificate).toString();
@@ -422,7 +530,7 @@ FileTransfer::FileTransfer(QString certificate, quint16 port, QString cacheRoot,
       }
     }
   }
-  m_impl = std::make_unique<Impl>(certificate, port, cacheRoot, addresses);
+  m_impl = std::make_unique<Impl>(certificate, port, cacheRoot, addresses, listen);
 }
 
 FileTransfer::~FileTransfer() = default;
@@ -470,6 +578,48 @@ bool FileTransfer::validOffer(const QByteArray &bytes)
   return decode(bytes, offer);
 }
 
+QList<FileTransfer::Entry> FileTransfer::entries(const QByteArray &bytes)
+{
+  Offer offer;
+  if (!decode(bytes, offer))
+    return {};
+  QList<FileTransfer::Entry> result;
+  for (const auto &entry : offer.entries)
+    result.append({entry.path, entry.directory, entry.size});
+  return result;
+}
+
+void FileTransfer::setProgressHandler(ProgressHandler handler)
+{
+  std::scoped_lock lock(progressMutex);
+  progressHandler = std::move(handler);
+}
+
+void FileTransfer::cancelTransfer(const QString &id)
+{
+  std::scoped_lock lock(progressMutex);
+  const auto it = activeTransfers.find(id);
+  if (it != activeTransfers.end()) {
+    if (auto flag = it->second.lock())
+      *flag = true;
+  }
+}
+
+QStringList FileTransfer::localPaths(const QByteArray &bytes) const
+{
+  std::scoped_lock lock(m_impl->mutex);
+  for (const auto &offer : m_impl->offers) {
+    if (encode(offer) != bytes)
+      continue;
+    QStringList result;
+    for (const auto &entry : offer.entries)
+      if (!entry.path.contains('/'))
+        result.append(entry.source);
+    return result;
+  }
+  return {};
+}
+
 QByteArray FileTransfer::offer(const QStringList &paths, const Cancelled &check)
 {
   if (paths.isEmpty() || paths.size() > kMaxEntries || cancelled(check))
@@ -497,7 +647,7 @@ QByteArray FileTransfer::offer(const QStringList &paths, const Cancelled &check)
     QFileInfo info(source);
     if (info.isSymLink() || (!info.isDir() && !info.isFile()) || !info.isReadable())
       return false;
-    Entry entry{relative, QDir::cleanPath(source), info.isDir(), 0, {}};
+    TransferEntry entry{relative, QDir::cleanPath(source), info.isDir(), 0, {}};
     if (entry.source.isEmpty())
       return false;
     if (entry.directory) {
@@ -510,26 +660,13 @@ QByteArray FileTransfer::offer(const QStringList &paths, const Cancelled &check)
           return false;
       }
     } else {
-      QFile file;
-      if (!openRegular(file, entry.source))
+      struct stat st{};
+      if (!statRegular(entry.source, st))
         return false;
-      entry.size = file.size();
+      entry.size = st.st_size;
       if (entry.size < 0 || entry.size > kMaxBytes - offer.total)
         return false;
-      QCryptographicHash hash(QCryptographicHash::Sha256);
-      qint64 read = 0;
-      while (!file.atEnd()) {
-        if (cancelled(check))
-          return false;
-        const auto block = file.read(kBlock);
-        if (block.isEmpty() || block.size() > entry.size - read)
-          return false;
-        hash.addData(block);
-        read += block.size();
-      }
-      if (read != entry.size)
-        return false;
-      entry.digest = hash.result();
+      entry.revision = revision(st);
       offer.total += entry.size;
       offer.entries.append(entry);
     }
@@ -560,7 +697,7 @@ QByteArray FileTransfer::offer(const QStringList &paths, const Cancelled &check)
   }
   {
     std::scoped_lock lock(impl.mutex);
-    while (impl.offers.size() >= 8)
+    while (impl.offers.size() >= 64)
       impl.offers.removeFirst();
     impl.offers.append(offer);
   }
@@ -572,6 +709,87 @@ QByteArray FileTransfer::offer(const QStringList &paths, const Cancelled &check)
   );
   return bytes;
 }
+
+namespace {
+bool downloadEntry(
+    const Offer &offer, int i, const QString &destination, const FileTransfer::Cancelled &stop,
+    const FileTransfer::Progress &progress = {}
+)
+{
+  const auto &entry = offer.entries[i];
+  QSslSocket socket;
+  socket.setReadBufferSize(kBlock * 2);
+  socket.setProtocol(QSsl::TlsV1_2OrLater);
+  // Trust is the exact certificate delivered inside authenticated Deskflow
+  // clipboard data, not the CA store or an arbitrary self-signed certificate.
+  socket.setPeerVerifyMode(QSslSocket::VerifyNone);
+  const auto hosts = offer.addresses;
+  bool connected = false;
+  for (const auto &host : hosts) {
+    socket.connectToHostEncrypted(host, offer.port);
+    if (waitEncrypted(socket, stop) &&
+        socket.peerCertificate().digest(QCryptographicHash::Sha256) == offer.fingerprint) {
+      connected = true;
+      break;
+    }
+    socket.abort();
+    if (stop())
+      return false;
+  }
+  if (!connected) {
+    LOG_WARN("file clipboard connection failed (address, TCP port, or certificate pin)");
+    return false;
+  }
+  socket.write(
+      (offer.version == 2 ? QByteArray("DFT2 ") : QByteArray("DFT1 ")) + offer.token.toLatin1() + ' ' +
+      QByteArray::number(i) + '\n'
+  );
+  socket.flush();
+  if (readLine(socket, 80, stop) != "OK " + QByteArray::number(entry.size) + '\n') {
+    LOG_WARN("file clipboard source refused a file (expired or changed selection)");
+    return false;
+  }
+  QSaveFile file(destination);
+  if (!file.open(QIODevice::WriteOnly))
+    return false;
+  file.setPermissions(QFile::ReadOwner | QFile::WriteOwner);
+  QCryptographicHash hash(QCryptographicHash::Sha256);
+  qint64 left = entry.size;
+  QDeadlineTimer idle(kIdleTimeout);
+  while (left > 0 && !stop() && !idle.hasExpired()) {
+    const auto block = socket.read(qMin(kBlock, left));
+    if (block.isEmpty()) {
+      if (socket.state() == QAbstractSocket::UnconnectedState)
+        break;
+      socket.waitForReadyRead(100);
+      continue;
+    }
+    if (file.write(block) != block.size())
+      return false;
+    hash.addData(block);
+    left -= block.size();
+    idle = QDeadlineTimer(kIdleTimeout);
+    if (progress)
+      progress(entry.size - left, entry.size);
+  }
+  auto expected = entry.digest;
+  if (offer.version == 2 && left == 0 && !stop()) {
+    const auto trailer = readLine(socket, 80, stop);
+    if (!trailer.startsWith("SHA256 ") || !hex(QString::fromLatin1(trailer.mid(7).trimmed()), 64))
+      return false;
+    expected = QByteArray::fromHex(trailer.mid(7).trimmed());
+  }
+  if (left != 0 || stop() || hash.result() != expected || !file.commit()) {
+    LOG_WARN(
+        "file clipboard transfer incomplete or checksum mismatch (%lld bytes missing); discarded staging files",
+        static_cast<long long>(left)
+    );
+    return false;
+  }
+  QFile::setPermissions(destination, QFile::ReadOwner);
+  return true;
+}
+} // namespace
 
 QStringList FileTransfer::receive(const QByteArray &bytes, const Cancelled &check)
 {
@@ -609,7 +827,6 @@ QStringList FileTransfer::receive(const QByteArray &bytes, const Cancelled &chec
     return {};
   const QDeadlineTimer deadline(15 * 60 * 1000);
   const auto stop = [&] { return cancelled(check) || deadline.hasExpired(); };
-  QString successfulHost;
   LOG_INFO(
       "receiving file clipboard: %lld entries, %lld bytes", static_cast<long long>(offer.entries.size()),
       static_cast<long long>(offer.total)
@@ -625,68 +842,8 @@ QStringList FileTransfer::receive(const QByteArray &bytes, const Cancelled &chec
       QFile::setPermissions(destination, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
       continue;
     }
-    QSslSocket socket;
-    socket.setReadBufferSize(kBlock * 2);
-    socket.setProtocol(QSsl::TlsV1_2OrLater);
-    // Trust is the exact certificate delivered inside authenticated Deskflow
-    // clipboard data, not the CA store or an arbitrary self-signed certificate.
-    socket.setPeerVerifyMode(QSslSocket::VerifyNone);
-    auto hosts = offer.addresses;
-    if (!successfulHost.isEmpty()) {
-      hosts.removeAll(successfulHost);
-      hosts.prepend(successfulHost);
-    }
-    bool connected = false;
-    for (const auto &host : hosts) {
-      socket.connectToHostEncrypted(host, offer.port);
-      if (waitEncrypted(socket, stop) &&
-          socket.peerCertificate().digest(QCryptographicHash::Sha256) == offer.fingerprint) {
-        connected = true;
-        successfulHost = host;
-        break;
-      }
-      socket.abort();
-      if (stop())
-        return {};
-    }
-    if (!connected) {
-      LOG_WARN("file clipboard connection failed (address, TCP port, or certificate pin)");
+    if (!downloadEntry(offer, i, destination, stop))
       return {};
-    }
-    socket.write("DFT1 " + offer.token.toLatin1() + ' ' + QByteArray::number(i) + '\n');
-    socket.flush();
-    if (readLine(socket, 80, stop) != "OK " + QByteArray::number(entry.size) + '\n') {
-      LOG_WARN("file clipboard source refused a file (expired or changed selection)");
-      return {};
-    }
-    QSaveFile file(destination);
-    if (!file.open(QIODevice::WriteOnly))
-      return {};
-    file.setPermissions(QFile::ReadOwner | QFile::WriteOwner);
-    QCryptographicHash hash(QCryptographicHash::Sha256);
-    qint64 left = entry.size;
-    QDeadlineTimer idle(kIdleTimeout);
-    while (left > 0 && !stop() && !idle.hasExpired()) {
-      const auto block = socket.read(qMin(kBlock, left));
-      if (block.isEmpty()) {
-        if (socket.state() == QAbstractSocket::UnconnectedState)
-          break;
-        socket.waitForReadyRead(100);
-        continue;
-      }
-      if (file.write(block) != block.size())
-        return {};
-      hash.addData(block);
-      left -= block.size();
-      idle = QDeadlineTimer(kIdleTimeout);
-    }
-    if (left != 0 || stop() || hash.result() != entry.digest || !file.commit()) {
-      LOG_WARN(
-          "file clipboard transfer incomplete or checksum mismatch (%lld bytes missing); discarded staging files",
-          static_cast<long long>(left)
-      );
-      return {};
-    }
   }
   const auto finalPath = impl.cacheRoot + "/transfer-" + QUuid::createUuid().toString(QUuid::Id128);
   if (stop() || !QDir().rename(staging.path(), finalPath))
@@ -699,6 +856,76 @@ QStringList FileTransfer::receive(const QByteArray &bytes, const Cancelled &chec
     impl.received.clear();
   impl.received.insert(id, result);
   LOG_INFO("file clipboard transfer complete; %lld copied items ready to paste", static_cast<long long>(result.size()));
+  return result;
+}
+
+QString FileTransfer::receiveFile(const QByteArray &bytes, int index, const Cancelled &check, const Progress &progress)
+{
+  Offer offer;
+  if (!decode(bytes, offer) || index < 0 || index >= offer.entries.size() || offer.entries[index].directory ||
+      cancelled(check))
+    return {};
+  auto &impl = *m_impl;
+  std::unique_lock lock(impl.receiveMutex, std::defer_lock);
+  while (!lock.try_lock()) {
+    if (cancelled(check))
+      return {};
+    std::this_thread::sleep_for(std::chrono::milliseconds(25));
+  }
+  const auto key =
+      QCryptographicHash::hash(bytes + ':' + QByteArray::number(index), QCryptographicHash::Sha256).toHex();
+  if (const auto path = impl.receivedFiles.value(key); !path.isEmpty() && QFileInfo::exists(path))
+    return path;
+  const auto &entry = offer.entries[index];
+  auto flag = std::make_shared<std::atomic<bool>>(false);
+  const QString id = QString::fromLatin1(key);
+  {
+    std::scoped_lock guard(progressMutex);
+    activeTransfers[id] = flag;
+  }
+  const QDeadlineTimer deadline(15 * 60 * 1000);
+  const auto stop = [&] { return *flag || cancelled(check) || deadline.hasExpired(); };
+  qint64 completed = 0;
+  auto lastUpdate = QDateTime::currentMSecsSinceEpoch();
+  report(id, entry.path, 0, entry.size, "receiving");
+  const auto update = [&](qint64 done, qint64 total) {
+    completed = done;
+    if (progress)
+      progress(done, total);
+    const auto now = QDateTime::currentMSecsSinceEpoch();
+    if (now - lastUpdate >= 250) {
+      report(id, entry.path, done, total, "receiving");
+      lastUpdate = now;
+    }
+  };
+  QString result;
+  if (QDir().mkpath(impl.cacheRoot)) {
+    QFile::setPermissions(impl.cacheRoot, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
+    for (const auto &old :
+         QDir(impl.cacheRoot)
+             .entryInfoList({"transfer-*", ".incoming-*"}, QDir::Dirs | QDir::Hidden | QDir::NoDotAndDotDot)) {
+      if (!old.isSymLink() && old.lastModified().secsTo(QDateTime::currentDateTime()) > 24 * 60 * 60)
+        QDir(old.absoluteFilePath()).removeRecursively();
+    }
+    QTemporaryDir staging(impl.cacheRoot + "/.incoming-XXXXXX");
+    const QStorageInfo storage(impl.cacheRoot);
+    const bool space =
+        !storage.isValid() || storage.bytesAvailable() < 0 || storage.bytesAvailable() >= entry.size + 16 * 1024 * 1024;
+    if (staging.isValid() && space && downloadEntry(offer, index, staging.filePath("contents"), stop, update) &&
+        !stop()) {
+      const auto finalPath = impl.cacheRoot + "/transfer-" + QUuid::createUuid().toString(QUuid::Id128);
+      if (QDir().rename(staging.path(), finalPath)) {
+        staging.setAutoRemove(false);
+        result = finalPath + "/contents";
+        impl.receivedFiles.insert(key, result);
+      }
+    }
+  }
+  report(id, entry.path, completed, entry.size, !result.isEmpty() ? "complete" : stop() ? "cancelled" : "failed");
+  {
+    std::scoped_lock guard(progressMutex);
+    activeTransfers.erase(id);
+  }
   return result;
 }
 

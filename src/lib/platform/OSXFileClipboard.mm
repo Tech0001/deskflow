@@ -12,6 +12,13 @@
 
 #import <AppKit/AppKit.h>
 
+#include <QDeadlineTimer>
+#include <QDir>
+#include <QFileInfo>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QProcess>
+
 #include <atomic>
 #include <condition_variable>
 #include <mutex>
@@ -19,6 +26,51 @@
 #include <thread>
 
 namespace deskflow {
+
+namespace {
+QByteArray providerCommand(const QString &command, const QByteArray &input, const FileTransfer::Cancelled &stop)
+{
+  auto program = qEnvironmentVariable("DESKFLOW_FILE_PROVIDER_HELPER");
+  if (program.isEmpty()) {
+    for (const auto &root : {QDir::homePath() + "/Applications", QString("/Applications")}) {
+      const auto candidate = root + "/Deskflow Files.app/Contents/MacOS/DeskflowFiles";
+      if (QFileInfo(candidate).isExecutable()) {
+        program = candidate;
+        break;
+      }
+    }
+  }
+  if (program.isEmpty()) {
+    if (command == "publish")
+      LOG_WARN("Install and enable the Deskflow Files companion to receive files on demand");
+    return {};
+  }
+  QProcess process;
+  process.setUnixProcessParameters(QProcess::UnixProcessFlag::CloseFileDescriptors);
+  process.setStandardErrorFile(QProcess::nullDevice());
+  process.start(program, {command});
+  if (!process.waitForStarted(1000))
+    return {};
+  process.write(input);
+  process.closeWriteChannel();
+  QByteArray result;
+  QDeadlineTimer deadline(45000);
+  while (!deadline.hasExpired() && !stop()) {
+    process.waitForReadyRead(100);
+    result += process.readAllStandardOutput();
+    if (result.size() > FileTransfer::kMaxOfferBytes)
+      break;
+    if (process.state() == QProcess::NotRunning) {
+      if (process.exitCode() != 0 && command == "publish")
+        LOG_WARN("Deskflow Files could not publish the selection; check that its File Provider extension is enabled");
+      return process.exitCode() == 0 ? result : QByteArray();
+    }
+  }
+  process.kill();
+  process.waitForFinished(1000);
+  return {};
+}
+} // namespace
 
 struct OSXFileClipboard::Impl
 {
@@ -89,10 +141,26 @@ struct OSXFileClipboard::Impl
       const auto stop = [this, id = task.generation] {
         return stopping || generation != id || !FileTransfer::enabled();
       };
-      if (task.receiving)
-        task.paths = files->receive(task.offer, stop);
-      else
-        task.offer = files->offer(task.paths, stop);
+      if (task.receiving) {
+        task.paths = files->localPaths(task.offer);
+        if (task.paths.isEmpty()) {
+          const auto result = providerCommand("publish", task.offer, stop);
+          const auto document = QJsonDocument::fromJson(result);
+          if (document.isArray()) {
+            for (const auto &value : document.array()) {
+              if (!value.isString() || !QDir::isAbsolutePath(value.toString())) {
+                task.paths.clear();
+                break;
+              }
+              task.paths.append(value.toString());
+            }
+          }
+        }
+      } else {
+        task.offer = providerCommand("resolve", QJsonDocument(QJsonArray::fromStringList(task.paths)).toJson(), stop);
+        if (!FileTransfer::validOffer(task.offer))
+          task.offer = files->offer(task.paths, stop);
+      }
       lock.lock();
       if (!stopping && generation == task.generation)
         result = std::move(task);
@@ -155,7 +223,8 @@ bool OSXFileClipboard::poll()
           if ([pasteboard writeObjects:urls]) {
             impl.observed = pasteboard.changeCount;
             impl.localFiles = true;
-            LOG_INFO("Finder file clipboard ready to paste");
+            impl.cached = completed->offer;
+            LOG_INFO("Finder file clipboard ready; contents will download on access");
           }
         }
       } else if (!completed->offer.isEmpty()) {
@@ -194,7 +263,10 @@ bool OSXFileClipboard::setClipboard(const IClipboard *source)
   if (!FileTransfer::enabled() || !FileTransfer::validOffer(bytes))
     return true; // Never publish raw remote paths or tokens to the native pasteboard.
   @autoreleasepool {
-    m_impl->observed = [NSPasteboard generalPasteboard].changeCount;
+    NSPasteboard *pasteboard = [NSPasteboard generalPasteboard];
+    [pasteboard clearContents]; // Supersede the old selection before preparing metadata.
+    m_impl->observed = pasteboard.changeCount;
+    m_impl->localFiles = false;
   }
   m_impl->receiving = true;
   m_impl->queue({m_impl->generation.load(), true, {}, bytes});

@@ -9,6 +9,7 @@ if(UNIX)
     SOURCE FileTransferTests.cpp
     WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/src/lib/platform"
   )
+  add_dependencies(FileTransferTests deskflow-file-transfer)
 endif()
 
 if (WIN32)
@@ -51,6 +52,13 @@ elseif(UNIX)
       WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/src/lib/platform"
     )
     if(HAVE_LP_CLIPBOARD)
+      create_test(
+        NAME LazyFileClipboardTests
+        DEPENDS platform
+        LIBS base arch Qt6::Network
+        SOURCE LazyFileClipboardTests.cpp
+        WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/src/lib/platform"
+      )
       create_test(
         NAME WaylandClipboardTests
         DEPENDS platform

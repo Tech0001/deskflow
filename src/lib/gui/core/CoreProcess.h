@@ -47,6 +47,7 @@ public:
   void applyLogLevel();
   void clearSettings();
   void retryDaemon();
+  void cancelFileTransfer(const QString &id);
 
   // getters
   Settings::CoreMode mode() const
@@ -94,6 +95,7 @@ Q_SIGNALS:
   void retryIn(int seconds);
   void peerFingerprint(const QString &fingerprint);
   void missingKeyboardLayouts(const QString &layouts);
+  void fileTransferProgress(const QString &payload);
 
 private Q_SLOTS:
   void onProcessFinished(int exitCode, QProcess::ExitStatus);

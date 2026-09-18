@@ -9,6 +9,10 @@
 
 #pragma once
 
+#include <QHash>
+#include <QPointer>
+class QProgressDialog;
+
 #include <QMainWindow>
 #include <QProcess>
 #include <QRegularExpression>
@@ -186,6 +190,7 @@ private:
 
   LogDock *m_logDock;
   StatusBar *m_statusBar = nullptr;
+  QHash<QString, QPointer<QProgressDialog>> m_fileTransfers;
 
   // Window Menu
   QMenu *m_menuFile = nullptr;

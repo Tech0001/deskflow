@@ -15,7 +15,13 @@
 #include "common/ExitCodes.h"
 #include "deskflow/ClientApp.h"
 #include "deskflow/ServerApp.h"
+#include "deskflow/ipc/CoreIpc.h"
 #include "deskflow/ipc/CoreIpcServer.h"
+#ifdef Q_OS_UNIX
+#include "platform/FileTransfer.h"
+#include <QJsonDocument>
+#include <QJsonObject>
+#endif
 
 #if defined(Q_OS_WIN)
 #include "arch/win32/ArchMiscWindows.h"
@@ -126,6 +132,29 @@ int main(int argc, char **argv)
       ipcServer, &deskflow::core::ipc::IpcServer::stopProcessRequested, coreApp, &App::quit, Qt::DirectConnection
   );
   ipcServer->listen();
+
+#ifdef Q_OS_UNIX
+  deskflow::FileTransfer::setProgressHandler([](const QString &id, const QString &name, qint64 done, qint64 total,
+                                                const QString &state) {
+    const auto data = QJsonDocument(
+                          QJsonObject{
+                              {"id", id},
+                              {"name", name},
+                              {"done", QString::number(done)},
+                              {"total", QString::number(total)},
+                              {"state", state}
+                          }
+    ).toJson(QJsonDocument::Compact);
+    ipcSendToClient(
+        "fileTransfer",
+        QString::fromLatin1(data.toBase64(QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals))
+    );
+  });
+  QObject::connect(
+      ipcServer, &deskflow::core::ipc::CoreIpcServer::fileTransferCancelRequested, &app,
+      [](const QString &id) { deskflow::FileTransfer::cancelTransfer(id); }
+  );
+#endif
 
   QThread coreThread;
   QObject::connect(&coreThread, &QThread::finished, &app, &QApplication::quit);
