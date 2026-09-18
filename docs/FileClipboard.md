@@ -70,8 +70,10 @@ source files are never deleted.
   files; repeat pastes normally read those without another network transfer.
 - The companion currently requires macOS 15+, a local signing identity, and
   extension registration. It is not part of the normal upstream app installer.
-  This source is implemented but still requires a native Mac build and paired
-  Finder testing; Linux validation does not establish macOS support.
+  The signed Mac build has passed native File Provider tests with a local TLS
+  sender, including 1 GiB, cached reads, and changed-source rejection. Paired
+  Linux/Mac clipboard publication, Finder Paste, and user cancellation still
+  require acceptance testing.
 
 ## Wire format and trust
 
@@ -121,7 +123,10 @@ helpers. Tests use ephemeral TLS ports and temporary identities/cache directorie
 DESKFLOW_TEST_GIB=1 QT_QPA_PLATFORM=minimal ctest --test-dir build/src/unittests --output-on-failure
 ```
 
-macOS must additionally compile the Objective-C++ adapter, Swift companion,
-and receiver helper, then test keyboard/menu Paste in Finder against this Linux
-build. The earlier standalone File Provider probe established API feasibility;
-it did not test this integrated Deskflow implementation.
+The integrated Mac Objective-C++ adapter, Swift companion, and receiver helper
+have been built and signed. Native File Provider reads passed against the real
+C++ TLS sender, including a verified 1 GiB file. The safe Mac test suites passed
+with the canonical temporary-path test correction. These local tests did not
+publish to the live clipboard or invoke Finder Paste. Keyboard/menu Paste and
+user cancellation against the matching Linux build remain paired acceptance
+checks; passing local tests alone does not establish that end-to-end behavior.

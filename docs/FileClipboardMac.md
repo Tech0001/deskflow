@@ -2,9 +2,9 @@
 
 This is the actual Deskflow implementation, not another standalone API probe.
 The Linux build has passed its 33 test suites, including a real 1 GiB encrypted
-FUSE transfer. The new Swift / Objective-C++ integration has not been compiled
-on Linux; build and test it on the Mac before calling this paired feature ready.
-Do not push changes yet.
+FUSE transfer. The Mac integration has also been compiled and exercised through
+the installed File Provider with local TLS transfers. Paired Linux/Mac acceptance
+testing is still required before calling the feature ready. Do not push changes yet.
 
 ## Source and configuration
 
@@ -63,6 +63,24 @@ replicated File Provider extension, bundles the C++ receiver and Qt libraries,
 and signs the result inside-out. The app and extension share the team-prefixed
 app group. They have sandbox and outbound-network entitlements; the receiver
 inherits the extension sandbox. The script does not install or register anything.
+
+The receiver, frameworks, Qt plugins, and `qt.conf` must live inside the extension
+bundle. The provider resolves the receiver with `Bundle.main.url(forAuxiliaryExecutable:)`
+and starts it with the shared storage directory as its working directory. A
+receiver placed only in the containing app failed to launch in the native provider
+test, even though compilation and signing succeeded.
+
+With split Homebrew Qt packages, add `--qt-libpath /opt/homebrew/opt/qtsvg/lib`
+(adjust the prefix on Intel). The script completes Qt deployment before embedding
+the extension, repeats dependency discovery for copied plugins, and signs after
+all load-command rewrites. Verify the final app with `codesign --verify --deep
+--strict` and check `otool -L` dependencies; no Homebrew paths or missing bundled
+frameworks should remain. Deploy the main app with both `deskflow-core` and
+`deskflow-file-transfer` passed as extra executables to `macdeployqt`.
+
+Preserve the existing main app's signing identity when replacing it so its
+designated requirement remains the same. The separate companion can use the
+available Developer ID identity; `--team` must match that companion identity.
 
 Keep the prior working Deskflow app as a rollback copy. Package/sign the new main
 Deskflow app using the same process that worked for the previous fork build; its

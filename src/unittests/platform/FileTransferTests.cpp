@@ -195,7 +195,7 @@ void FileTransferTests::metadataOnlyOffer()
   struct stat st{};
   QCOMPARE(::stat(QFile::encodeName(path).constData(), &st), 0);
   QCOMPARE(st.st_atime, 1); // Even a single source read would update this atime.
-  QCOMPARE(sender.localPaths(offer), QStringList{path});
+  QCOMPARE(sender.localPaths(offer), QStringList{QFileInfo(path).canonicalFilePath()});
 }
 
 void FileTransferTests::individualFileCancellationRetryAndCache()

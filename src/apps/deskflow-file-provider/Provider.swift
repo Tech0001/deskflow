@@ -23,7 +23,12 @@ final class ClipboardItem: NSObject, NSFileProviderItem {
         return UTType(filenameExtension: (filename as NSString).pathExtension) ?? .data
     }
     var documentSize: NSNumber? { entry.flatMap { Int64($0.size).map { NSNumber(value: $0) } } }
-    var capabilities: NSFileProviderItemCapabilities { [.allowsReading, .allowsEvicting] }
+    var capabilities: NSFileProviderItemCapabilities { [.allowsReading] }
+    var fileSystemFlags: NSFileProviderFileSystemFlags {
+        // Native copies retain these POSIX permissions. Keep received copies
+        // writable even though the provider does not accept remote mutations.
+        entry == nil || entry!.directory ? [.userReadable, .userWritable, .userExecutable] : [.userReadable, .userWritable]
+    }
     var contentPolicy: NSFileProviderContentPolicy { .downloadLazily }
     var itemVersion: NSFileProviderItemVersion {
         let version = entry?.revision ?? entry?.sha256 ?? "directory"
@@ -107,9 +112,11 @@ final class ClipboardProvider: NSObject, NSFileProviderReplicatedExtension, NSFi
                 let item = ClipboardItem(identifier, offer)
                 if let version, version != item.itemVersion { throw NSError(domain: NSCocoaErrorDomain, code: NSFileReadUnknownError) }
                 progress.totalUnitCount = Int64(offer.entries[index].size) ?? 0
-                // Extension -> PlugIns -> Contents -> companion app executable.
-                let contents = Bundle.main.bundleURL.deletingLastPathComponent().deletingLastPathComponent()
-                process.executableURL = contents.appendingPathComponent("MacOS/deskflow-file-transfer")
+                guard let helper = Bundle.main.url(forAuxiliaryExecutable: "deskflow-file-transfer") else {
+                    throw NSError(domain: NSCocoaErrorDomain, code: NSFileNoSuchFileError)
+                }
+                process.executableURL = helper
+                process.currentDirectoryURL = try storage()
                 process.arguments = [String(index)]
                 let input = Pipe(), output = Pipe()
                 process.standardInput = input; process.standardOutput = output
