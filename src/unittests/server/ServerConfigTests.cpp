@@ -89,6 +89,47 @@ void ServerConfigTests::modifierSwap_externalConfigAndToggleOff()
   Settings::setValue(key);
 }
 
+void ServerConfigTests::externalConfig_preservesOffsetAndGeneralScreenOptions()
+{
+  const auto swap = Settings::Server::SwapControlSuperScreens;
+  const auto corner = Settings::Screen::SwitchCornerSize.arg("mac.local");
+  Settings::setValue(swap, QStringList{"mac.local"});
+  Settings::setValue(corner, 17);
+  // Legacy screen entries retain their links, while moved options come from
+  // general settings. The Mac is 400 pixels higher on two 1440-pixel screens.
+  std::istringstream input(R"(
+section: screens
+  mac.local:
+    halfDuplexCapsLock = false
+    switchCornerSize = 0
+  linux.local:
+    switchCornerSize = 0
+end
+section: links
+  mac.local:
+    right(27.777778,100) = linux.local(0,72.222222)
+  linux.local:
+    left(0,72.222222) = mac.local(27.777778,100)
+end
+)");
+  Config config(nullptr);
+  input >> config;
+  float destination = 0;
+  QCOMPARE(config.getNeighbor("mac.local", Direction::Right, 0.5f, &destination), std::string("linux.local"));
+  QVERIFY(qAbs(destination - 0.22222222f) < 0.00001f);
+  QCOMPARE(config.getNeighbor("linux.local", Direction::Left, 0.5f, &destination), std::string("mac.local"));
+  QVERIFY(qAbs(destination - 0.77777778f) < 0.00001f);
+  QVERIFY(config.getNeighbor("mac.local", Direction::Right, 0.1f, nullptr).empty());
+  QVERIFY(config.getNeighbor("linux.local", Direction::Left, 0.9f, nullptr).empty());
+  const auto mac = config.getOptions("mac.local");
+  QVERIFY(mac != nullptr);
+  QCOMPARE(mac->at(kOptionModifierMapForControl), OptionValue(kKeyModifierIDSuper));
+  QCOMPARE(mac->at(kOptionModifierMapForSuper), OptionValue(kKeyModifierIDControl));
+  QCOMPARE(mac->at(kOptionScreenSwitchCornerSize), OptionValue(17));
+  Settings::setValue(swap);
+  Settings::setValue(corner);
+}
+
 void ServerConfigTests::equalityCheck()
 {
   Config a(nullptr);

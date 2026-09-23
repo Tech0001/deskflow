@@ -14,6 +14,7 @@ private Q_SLOTS:
   void initTestCase();
   void modifierSwap_selectedComputerOnly();
   void modifierSwap_externalConfigAndToggleOff();
+  void externalConfig_preservesOffsetAndGeneralScreenOptions();
   void equalityCheck();
   void equalityCheck_diff_options();
   void equalityCheck_diff_alias();

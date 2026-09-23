@@ -23,8 +23,10 @@ private Q_SLOTS:
   void mapKeyFromKeyval_ctrlAltF1_returnsFunctionKey();
   void mapKeyFromKeyval_shiftedText_preservesCase();
   void updateXkbModifiers_snapshotIsAuthoritative();
+  void updateXkbModifiers_numLockFollowsCompositor();
   void updateKeyState_preservesCompositorModifiersAndPressedKeys();
   void releasePressedKeys_sendsReleasesAndResetsState();
+  void updateLockedModifiers_compositorLockState_numLockFollowsCompositor();
 
 private:
   Arch m_arch;

@@ -38,6 +38,7 @@ public:
   void
   updateXkbModifiers(xkb_mod_mask_t depressed, xkb_mod_mask_t latched, xkb_mod_mask_t locked, xkb_layout_index_t group);
   void releasePressedKeys(void *target);
+  void updateLockedModifiers(xkb_mod_mask_t lockedMods);
   void clearStaleModifiers() override;
 
 protected:

@@ -382,6 +382,20 @@ void EiKeyState::releasePressedKeys(void *target)
   onKey(0, false, pollActiveModifiers());
 }
 
+void EiKeyState::updateLockedModifiers(xkb_mod_mask_t lockedMods)
+{
+  // The compositor's lock state (Caps/Num/Scroll Lock) is authoritative; it
+  // also covers locks toggled while we weren't seeing the key events.
+  const auto depressedMods = xkb_state_serialize_mods(m_xkbState, XKB_STATE_MODS_DEPRESSED);
+  const auto latchedMods = xkb_state_serialize_mods(m_xkbState, XKB_STATE_MODS_LATCHED);
+  const auto depressedLayout = xkb_state_serialize_layout(m_xkbState, XKB_STATE_LAYOUT_DEPRESSED);
+  const auto latchedLayout = xkb_state_serialize_layout(m_xkbState, XKB_STATE_LAYOUT_LATCHED);
+  const auto lockedLayout = xkb_state_serialize_layout(m_xkbState, XKB_STATE_LAYOUT_LOCKED);
+  xkb_state_update_mask(
+      m_xkbState, depressedMods, latchedMods, lockedMods, depressedLayout, latchedLayout, lockedLayout
+  );
+}
+
 void EiKeyState::clearStaleModifiers()
 {
   // A fresh compositor snapshot can arrive before Screen::leavePrimary().
