@@ -7,7 +7,7 @@
 #include "platform/PortalGlobalShortcuts.h"
 #include "base/Log.h"
 #include "base/TMethodJob.h"
-#include "platform/EiScreen.h"
+#include "platform/EiComputer.h"
 #include <inttypes.h>
 
 #include <algorithm> // std::find_if, std::ranges::all_of
@@ -16,8 +16,8 @@
 
 namespace deskflow {
 
-PortalGlobalShortcuts::PortalGlobalShortcuts(EiScreen *screen, IEventQueue *events)
-    : m_screen{screen},
+PortalGlobalShortcuts::PortalGlobalShortcuts(EiComputer *computer, IEventQueue *events)
+    : m_computer{computer},
       m_events{events},
       m_portal{xdp_portal_new()}
 {
@@ -296,7 +296,7 @@ void PortalGlobalShortcuts::bindShortcutsDone(GObject *object, GAsyncResult *res
         xdp_global_shortcut_assigned_get_trigger_description(shortcut)
     );
   }
-  // EiScreen can't be notified about the change, because triggerDescription is only a
+  // EiComputer can't be notified about the change, because triggerDescription is only a
   // human-readable string and not a preferred trigger string
 }
 
@@ -323,7 +323,7 @@ void PortalGlobalShortcuts::handleActivated(
 
   LOG_DEBUG("global shortcut activated: %s timestamp=%" PRIu64, shortcutId, timestamp);
   m_events->addEvent(Event(
-      EventTypes::PrimaryScreenHotkeyDown, m_screen->getEventTarget(), IPrimaryScreen::HotKeyInfo::alloc(hotKeyId)
+      EventTypes::PrimaryComputerHotkeyDown, m_computer->getEventTarget(), IPrimaryComputer::HotKeyInfo::alloc(hotKeyId)
   ));
 }
 
@@ -342,9 +342,9 @@ void PortalGlobalShortcuts::handleDeactivated(
   }
 
   LOG_DEBUG("global shortcut deactivated: %s timestamp=%" PRIu64, shortcutId, timestamp);
-  m_events->addEvent(
-      Event(EventTypes::PrimaryScreenHotkeyUp, m_screen->getEventTarget(), IPrimaryScreen::HotKeyInfo::alloc(hotKeyId))
-  );
+  m_events->addEvent(Event(
+      EventTypes::PrimaryComputerHotkeyUp, m_computer->getEventTarget(), IPrimaryComputer::HotKeyInfo::alloc(hotKeyId)
+  ));
 }
 
 void PortalGlobalShortcuts::handleShortcutsChanged(XdpGlobalShortcutsSession *session, GPtrArray *shortcuts)
@@ -370,7 +370,7 @@ void PortalGlobalShortcuts::handleShortcutsChanged(XdpGlobalShortcutsSession *se
     triggerDescription = xdp_global_shortcut_assigned_get_trigger_description(shortcut);
     LOG_DEBUG("global shortcut %s changed to %s", shortcutId, triggerDescription);
 
-    // EiScreen can't be notified about the change, because triggerDescription is only a
+    // EiComputer can't be notified about the change, because triggerDescription is only a
     // human-readable string and not a preferred trigger string
   }
 }

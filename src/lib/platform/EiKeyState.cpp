@@ -21,11 +21,11 @@
 
 namespace deskflow {
 
-EiKeyState::EiKeyState(EiScreen *screen, IEventQueue *events)
+EiKeyState::EiKeyState(EiComputer *computer, IEventQueue *events)
     : KeyState(
           events, AppUtil::instance().getKeyboardLayoutList(), Settings::value(Settings::Client::LanguageSync).toBool()
       ),
-      m_screen{screen},
+      m_computer{computer},
       m_eventQueue{events}
 {
   m_xkb = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
@@ -167,11 +167,9 @@ std::uint32_t EiKeyState::convertModMask(xkb_mod_mask_t xkbModMaskIn, bool mapMo
       modMaskOut |= (1 << kKeyModifierBitControl);
     else if (strcmp(XKB_MOD_NAME_ALT, name) == 0 || strcmp(XKB_VMOD_NAME_ALT, name) == 0)
       modMaskOut |= (1 << kKeyModifierBitAlt);
-    else if (
-        strcmp(XKB_MOD_NAME_LOGO, name) == 0 ||   // aka windows/command key
-        strcmp(XKB_VMOD_NAME_SUPER, name) == 0 || // virtual; usually mapped to logo key
-        strcmp(XKB_VMOD_NAME_HYPER, name) == 0
-    ) // virtual; often mapped to caps lock key
+    else if (strcmp(XKB_MOD_NAME_LOGO, name) == 0 ||   // aka windows/command key
+             strcmp(XKB_VMOD_NAME_SUPER, name) == 0 || // virtual; usually mapped to logo key
+             strcmp(XKB_VMOD_NAME_HYPER, name) == 0)   // virtual; often mapped to caps lock key
       modMaskOut |= (1 << kKeyModifierBitSuper);
     else if (strcmp(XKB_MOD_NAME_MOD5, name) == 0 || strcmp(XKB_VMOD_NAME_LEVEL3, name) == 0)
       modMaskOut |= (1 << kKeyModifierBitAltGr);
@@ -181,10 +179,9 @@ std::uint32_t EiKeyState::convertModMask(xkb_mod_mask_t xkbModMaskIn, bool mapMo
       modMaskOut |= (1 << kKeyModifierBitNumLock);
     else if (strcmp(XKB_VMOD_NAME_SCROLL, name) == 0)
       modMaskOut |= (1 << kKeyModifierBitScrollLock);
-    else if (
-        (strcmp(XKB_VMOD_NAME_META, name) == 0) || // virtual; the old meta (not the new meta/super/logo key)
-        (!mapMod2ToNumLock && strcmp(XKB_MOD_NAME_MOD2, name) == 0) || // spare, sometimes mapped to num lock.
-        (strcmp(XKB_MOD_NAME_MOD3, name) == 0) // spare, could be mapped to alt_r, caps lock, scroll lock, etc.
+    else if ((strcmp(XKB_VMOD_NAME_META, name) == 0) || // virtual; the old meta (not the new meta/super/logo key)
+             (!mapMod2ToNumLock && strcmp(XKB_MOD_NAME_MOD2, name) == 0) || // spare, sometimes mapped to num lock.
+             (strcmp(XKB_MOD_NAME_MOD3, name) == 0) // spare, could be mapped to alt_r, caps lock, scroll lock, etc.
     )
       LOG_VERBOSE("modifier mask %s ignored", name);
     else
@@ -317,7 +314,7 @@ void EiKeyState::fakeKey(const Keystroke &keystroke)
       "fake key: %03x (%08x) %s", keystroke.m_data.m_button.m_button, keystroke.m_data.m_button.m_client,
       keystroke.m_data.m_button.m_press ? "down" : "up"
   );
-  m_screen->fakeKey(keystroke.m_data.m_button.m_button, keystroke.m_data.m_button.m_press);
+  m_computer->fakeKey(keystroke.m_data.m_button.m_button, keystroke.m_data.m_button.m_press);
 }
 
 KeyID EiKeyState::mapKeyFromKeyval(uint32_t keyval) const
@@ -398,7 +395,7 @@ void EiKeyState::updateLockedModifiers(xkb_mod_mask_t lockedMods)
 
 void EiKeyState::clearStaleModifiers()
 {
-  // A fresh compositor snapshot can arrive before Screen::leavePrimary().
+  // A fresh compositor snapshot can arrive before Computer::leavePrimary().
   // Do not discard it when the generic screen code refreshes keyboard state.
   if (m_hasModifierState)
     return;
@@ -409,7 +406,7 @@ void EiKeyState::clearStaleModifiers()
   // Recreate the XKB state to clear stuck depressed modifiers that happen when
   // modifier keys are pressed on the client and released on the server. Locked
   // modifiers are real keyboard state; do not clear NumLock/CapsLock/ScrollLock
-  // during screen transitions.
+  // during computer transitions.
   if (m_xkbState) {
     xkb_state_unref(m_xkbState);
   }

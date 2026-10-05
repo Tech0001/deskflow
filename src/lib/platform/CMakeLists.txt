@@ -38,6 +38,8 @@ if(WIN32)
     MSWindowsClipboardHTMLConverter.h
     MSWindowsClipboardUTF16Converter.cpp
     MSWindowsClipboardUTF16Converter.h
+    MSWindowsComputer.cpp
+    MSWindowsComputer.h
     MSWindowsDebugOutputter.cpp
     MSWindowsDebugOutputter.h
     MSWindowsDesks.cpp
@@ -52,8 +54,6 @@ if(WIN32)
     MSWindowsPowerManager.h
     MSWindowsProcess.cpp
     MSWindowsProcess.h
-    MSWindowsScreen.cpp
-    MSWindowsScreen.h
     MSWindowsScreenSaver.cpp
     MSWindowsScreenSaver.h
     MSWindowsSession.cpp
@@ -86,6 +86,8 @@ elseif(APPLE)
     OSXClipboardUTF16Converter.h
     OSXCocoaApp.h
     OSXCocoaApp.m
+    OSXComputer.h
+    OSXComputer.mm
     OSXEventQueueBuffer.cpp
     OSXEventQueueBuffer.h
     OSXKeyLayoutResource.cpp
@@ -98,8 +100,6 @@ elseif(APPLE)
     OSXPasteboardPeeker.m
     OSXPowerManager.cpp
     OSXPowerManager.h
-    OSXScreen.h
-    OSXScreen.mm
     OSXScreenSaver.cpp
     OSXScreenSaver.h
     OSXScreenSaverControl.h
@@ -131,12 +131,12 @@ elseif(UNIX)
       XWindowsClipboardUCS2Converter.h
       XWindowsClipboardUTF8Converter.cpp
       XWindowsClipboardUTF8Converter.h
+      XWindowsComputer.cpp
+      XWindowsComputer.h
       XWindowsEventQueueBuffer.cpp
       XWindowsEventQueueBuffer.h
       XWindowsKeyState.cpp
       XWindowsKeyState.h
-      XWindowsScreen.cpp
-      XWindowsScreen.h
       XWindowsScreenSaver.cpp
       XWindowsScreenSaver.h
       XWindowsUtil.cpp
@@ -149,12 +149,12 @@ elseif(UNIX)
     list(APPEND PLATFORM_SOURCES
       EiClipboard.cpp
       EiClipboard.h
+      EiComputer.cpp
+      EiComputer.h
       EiEventQueueBuffer.cpp
       EiEventQueueBuffer.h
       EiKeyState.cpp
       EiKeyState.h
-      EiScreen.cpp
-      EiScreen.h
       EiScrollState.h
     )
     # The Portal sources also require EI.

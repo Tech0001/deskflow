@@ -75,10 +75,10 @@ This section contains general options it will begin with `[core]`
 | computerName  | string            | Name used to identify the computer [default: machine's hostname] |
 | useHooks      | `true` or `false` | If Windows uses hooks or not [default: true] |
 | language      | 639 language      | The language to display the GUI in [default: en] |
-| enableEnterCommand | `true` or `false` | Should the enter command be triggered when the screen is entered [defaut: false] |
-| enterCommand  | command | A command to run when the screen is entered. |
-| enableExitCommand | `true` or `false` | Should the exit command be triggered when the screen is exited [defaut: false] |
-| exitCommand  | command | A command to run when the screen is exited. |
+| enableEnterCommand | `true` or `false` | Should the enter command be triggered when the computer is entered [defaut: false] |
+| enterCommand  | command | A command to run when the computer is entered. |
+| enableExitCommand | `true` or `false` | Should the exit command be triggered when the computer is exited [defaut: false] |
+| exitCommand  | command | A command to run when the computer is exited. |
 
 ### Daemon
 
@@ -147,7 +147,7 @@ owner does not block keyboard or mouse forwarding.
 
 |Option              |    Valid Values   |Description|
 |:-------------------|:-----------------:|:-----------|
-| clipboardSize      | int > 0           | Deskflow will send a maximum of `N` megabytes of clipboard data to another computer when the mouse transitions to that computer.|
+| clipboardSize      | int > 0           | Deskflow will send a maximum of `N` megabytes of clipboard data to another computer when the mouse transitions to that computer. Clients use the server's value for both sending and receiving.|
 | defaultLockToComputerState| `true` or `false` | When this is true the cursor is locked to the new computer when switching (default: false)|
 | disableLockToComputer| `true` or `false` | If false pressing scroll lock will toggle your cursor to be locked to current computer. (default: false) |
 | enableClipboard    | `true` or `false` | When `true` the clipboard will be shared with all clients If set to ''true'' then clipboard shared and the ''clipboardSharingSize'' setting will be used. If set to false, then clipboard sharing will be disabled and the the ''clipboardSharingSize'' setting will be ignored.|
@@ -167,9 +167,9 @@ owner does not block keyboard or mouse forwarding.
 
  - You can use both the ''switchDelay'' and ''switchDoubleTap'' options at the same time. Deskflow will switch when either requirement is satisfied.
 
-### Screen Settings
+### Computer Settings
 
-Each screen will have a section where its configuration will be stored, if the screen was named "foo" the section will be named `[screen_foo]`
+Each computer will have a section where its configuration will be stored, if the computer was named "foo" the section will be named `[computer_foo]`
 
 |Option                  |    Valid Values   |Description|
 |:-----------------------|:-----------------:|:-----------|
@@ -178,13 +178,19 @@ Each screen will have a section where its configuration will be stored, if the s
 | halfDuplexCapsLock     | `true` or `false` | This computer has a ''Caps Lock'' key that doesn't report a press and a release event when the user presses it but instead reports a press event when it's turned on and a release event when it's turned off. If ''Caps Lock'' acts strangely on all computers then you may need to set this option to true on the server. If it acts strangely on one computer then that computer may need the option set to true.|
 | halfDuplexNumLock      | `true` or `false` | This computer has a ''Num Lock'' key that doesn't report a press and a release event when the user presses it but instead reports a press event when it's turned on and a release event when it's turned off. If ''Num Lock'' acts strangely on all computers then you may need to set this option to true on the server. If it acts strangely on one computer then that computer may need the option set to true.|
 | halfDuplexScrollLock   | `true` or `false` | This computer has a ''Scroll Lock'' key that doesn't report a press and a release event when the user presses it but instead reports a press event when it's turned on and a release event when it's turned off. If ''Scroll Lock'' acts strangely on all computers then you may need to set this option to true on the server. If it acts strangely on one computer then that computer may need the option set to true.|
+| modifierAlt             | `shift` `ctrl` `alt` `altgr` `meta` `super` or  `none` | Map the server's alt modifer to different key on this computer|
+| modifierAltGr           | `shift` `ctrl` `alt` `altgr` `meta` `super` or  `none` | Map the server's altgr modifer to different key on this computer|
+| modifierCtrl            | `shift` `ctrl` `alt` `altgr` `meta` `super` or  `none` | Map the server's ctrl modifer to different key on this computer|
+| modifierMeta            | `shift` `ctrl` `alt` `altgr` `meta` `super` or  `none` | Map the server's meta modifer to different key on this computer|
+| modifierShift           | `shift` `ctrl` `alt` `altgr` `meta` `super` or  `none` | Map the server's shift modifer to different key on this computer|
+| modifierSuper           | `shift` `ctrl` `alt` `altgr` `meta` `super` or  `none` | Map the server's super modifer to different key on thist computer|
 | switchCornerSize       | integer (N)       | Sets the size of all corners in pixels. The cursor must be within `N` pixels of the corner to be considered to be in the corner.|
 | switchCornerTopLeft    | `true` or `false` | Deskflow won't switch computers when the mouse reaches the edge of the computer if it includes this corner. The size of the corner is given by the `switchCornerSize` option. |
 | switchCornerTopRight   | `true` or `false` | Deskflow won't switch computers when the mouse reaches the edge of the computer if it includes this corner. The size of the corner is given by the `switchCornerSize` option. |
 | switchCornerBottomLeft | `true` or `false` | Deskflow won't switch computers when the mouse reaches the edge of the computer if it includes this corner. The size of the corner is given by the `switchCornerSize` option. |
 | switchCornerBottomRight| `true` or `false` | Deskflow won't switch computers when the mouse reaches the edge of the computer if it includes this corner. The size of the corner is given by the `switchCornerSize` option. |
 | xtestIsXineramaUnaware | `true` or `false` | This option works around a bug in the XTest extension when used in combination with Xinerama. It affects X11 clients only. Not all versions of the XTest extension are aware of the Xinerama extension. As a result, they do not move the mouse correctly when using multiple Xinerama screens. This option is currently ''true'' by default. If you know your XTest extension is Xinerama aware then set this option to ''false''.|
-| weakX11Focus           | `true` or `false` | This X11 Client will not gain focus until an input event has been processed its screen |
+| weakX11Focus           | `true` or `false` | This X11 Client will not gain focus until an input event has been processed its any of its screens |
 
 ### InternalConfig
 
@@ -208,13 +214,6 @@ hotkeys\1\keys\1\key=83
 hotkeys\1\keys\size=1
 hotkeys\size=1
 screens\1\name=
-screens\10\modifierArray\1\modifier=0
-screens\10\modifierArray\2\modifier=1
-screens\10\modifierArray\3\modifier=2
-screens\10\modifierArray\4\modifier=3
-screens\10\modifierArray\5\modifier=4
-screens\10\modifierArray\6\modifier=5
-screens\10\modifierArray\size=6
 screens\10\name=null
 screens\11\name=
 screens\12\name=
@@ -226,29 +225,8 @@ screens\3\name=
 screens\4\name=
 screens\5\name=
 screens\6\name=
-screens\7\modifierArray\1\modifier=0
-screens\7\modifierArray\2\modifier=1
-screens\7\modifierArray\3\modifier=2
-screens\7\modifierArray\4\modifier=3
-screens\7\modifierArray\5\modifier=4
-screens\7\modifierArray\6\modifier=5
-screens\7\modifierArray\size=6
 screens\7\name=void
-screens\8\modifierArray\1\modifier=0
-screens\8\modifierArray\2\modifier=1
-screens\8\modifierArray\3\modifier=2
-screens\8\modifierArray\4\modifier=3
-screens\8\modifierArray\5\modifier=4
-screens\8\modifierArray\6\modifier=5
-screens\8\modifierArray\size=6
 screens\8\name=chris-Precision-5570
-screens\9\modifierArray\1\modifier=0
-screens\9\modifierArray\2\modifier=1
-screens\9\modifierArray\3\modifier=2
-screens\9\modifierArray\4\modifier=3
-screens\9\modifierArray\5\modifier=4
-screens\9\modifierArray\6\modifier=5
-screens\9\modifierArray\size=6
 screens\9\name=abyss.lan
 screens\size=15
 ```
@@ -267,38 +245,10 @@ end
 
 Comments are introduced by ''#'' and continue to the end of the line. ''name'' must be one of the following:
 
-* ''screens''
 * ''links''
 * ''options''
 
-The file is parsed top to bottom and names cannot be used before they've been defined in the `screens` or as an alias in the general config. So the `links` must appear after the `screens`.
-
-### The screens section
-
-''args'' is a list of computer names, one name per line, each followed by a colon. Names are arbitrary strings but they must be unique. The hostname of each computer is recommended. (This is the computer's network name on win32 and the name reported by the program hostname on Unix and OS X. Note that OS X may append .local to the name you gave your computer; e.g. somehost.local.) There must be a computer name for the server and each client. Each computer can specify a number of options. Options have the form name = value and are listed one per line after the computer name.
-
-```
-section: screens
-	moe:
-	larry:
-	curly:
-		meta = alt
-end
-```
-
-This declares three computers named ''moe'', ''larry'', and ''curly''. Computer ' computer ''curly'' converts the ''Meta'' modifier key to the ''Alt'' modifier key.
-
-#### screen options
-
-A computer can have the following options:
-
-|Option | Valid Values| Description|
-|:----------|:-----------:|:-----------|
-|shift | shift ctrl alt meta super none | Map the server's shift modifer to different key on a client computer|
-|ctrl  | shift ctrl alt meta super none | Map the server's ctrl modifer to different key on a client computer|
-|alt | shift ctrl alt meta super none | Map the server's alt modifer to different key on a client computer|
-|meta|  shift ctrl alt meta super none | Map the server's meta modifer to different key on a client computer|
-|super|  shift ctrl alt meta super none | Map the server's super modifer to different key on a client computer|
+The file is parsed top to bottom and names cannot be used before they've been defined in the general config or as an alias in the general config.
 
 #### Swap Control and Command for a computer
 
@@ -575,15 +525,6 @@ This example comes from doc/deskflow-basic.conf
 # |       |  |        | |         |
 # +-------+  +--------+ +---------+
 
-section: screens
-	# three hosts named:  Laptop, Desktop1, and iMac
-	# These are the nice names of the hosts to make it easy to write the config file
-	# The aliases section below contain the "actual" names of the hosts (their hostnames)
-	Laptop:
-	Desktop1:
-	iMac:
-end
-
 section: links
 	# iMac is to the right of Desktop1
 	# Laptop is to the left of Desktop1
@@ -618,10 +559,6 @@ The text config allows computers to be wrapped around. For example, with two mac
 #  |          |          |
 #  +----------+----------+ 
  
-section: screens
-	syn-serv:
-	syn-cli:
-end
 section: links
 	syn-serv:
 		left = syn-cli     # "wrapping" arrangement
@@ -636,15 +573,6 @@ section: options
 end
 ```
 
-### AltGr key
-
-The following screen config allows the mapping for ''Alt'' to ''AltGr''. Although this may not work, see [https://github.com/deskflow/deskflow-core/issues/4411 bug #4411].
-```
-section: screens
-	client1:
-		altgr = alt          # mapping to fix AltGr key not working on windows clients (e.g. @-Symbol etc.).
-end
-```
 
 See also: the man page for ''deskflow-core''.
 
@@ -662,13 +590,6 @@ Stack one computer on top of another's.
 # |       | |       |
 # +-------+ +-------+
 
-section: screens
-	# three hosts named: moe, larry, and curly
-	moe:
-	larry:
-	curly:
-end
-
 section: links
 	# larry is to the right of moe and curly is above moe.
 	moe:
@@ -685,11 +606,6 @@ section: links
 		down  = larry
 end
 
-section: aliases
-	# curly is also known as shemp
-	curly:
-		shemp
-end
 ```
 
 ### Horizontal Example
@@ -701,13 +617,6 @@ Align all computers horizontally.
 # | moe   | | larry | | curly |
 # |       | |       | |       |
 # +-------+ +-------+ +-------+
-
-section: screens
-	# three hosts named: moe, larry, and curly
-	moe:
-	larry:
-	curly:
-end
 
 section: links
 	# curly is to the right of larry and moe is to the left of larry.
@@ -739,13 +648,6 @@ Span one computer across the two other computers.
 # | moe   | | larry |
 # |       | |       |
 # +-------+ +-------+
-
-section: screens
-	# three hosts named: moe, larry, and curly
-	moe:
-	larry:
-	curly:
-end
 
 section: links
 	# larry is to the right of moe and curly is above moe.
