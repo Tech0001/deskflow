@@ -11,9 +11,11 @@
 #include "base/Log.h"
 #include "base/TMethodJob.h"
 #include "common/Settings.h"
+#include "platform/EiClipboard.h"
 
 #ifdef HAVE_LIBPORTAL_CLIPBOARD
 #include "platform/PortalClipboard.h"
+#include "platform/WaylandClipboard.h"
 #endif
 
 namespace deskflow {
@@ -23,6 +25,11 @@ PortalRemoteDesktop::PortalRemoteDesktop(EiComputer *computer, IEventQueue *even
       m_events{events},
       m_portal{xdp_portal_new()}
 {
+#ifdef HAVE_LIBPORTAL_CLIPBOARD
+  m_waylandClipboard = std::make_unique<WaylandClipboard>([this] {
+    m_computer->sendClipboardEvent(EventTypes::ClipboardGrabbed, kClipboardClipboard);
+  });
+#endif
   m_glibMainLoop = g_main_loop_new(nullptr, true);
 
   auto tMethodJob = new TMethodJob<PortalRemoteDesktop>(this, &PortalRemoteDesktop::glibThread);
@@ -57,6 +64,10 @@ PortalRemoteDesktop::~PortalRemoteDesktop()
   g_object_unref(m_portal);
 
   free(m_sessionRestoreToken);
+
+#ifdef HAVE_LIBPORTAL_CLIPBOARD
+  m_waylandClipboard.reset();
+#endif
 }
 
 gboolean PortalRemoteDesktop::timeoutHandler() const
@@ -99,7 +110,15 @@ void PortalRemoteDesktop::handleSessionStarted(GObject *object, GAsyncResult *re
   }
 
 #ifdef HAVE_LIBPORTAL_CLIPBOARD
-  if (!xdp_session_is_clipboard_enabled(session)) {
+  // Input-only backends cannot grant clipboard access. Use the same bounded,
+  // asynchronous fallback as InputCapture, without restarting working input.
+  const bool clipboardRequested = Settings::value(Settings::Server::EnableClipboard).toBool();
+  m_useClipboardFallback =
+      clipboardRequested && !xdp_session_is_clipboard_enabled(session) && m_waylandClipboard->available();
+  if (m_useClipboardFallback) {
+    LOG_INFO("Remote desktop Clipboard portal unavailable; using wl-clipboard fallback");
+  } else if (clipboardRequested && !xdp_session_is_clipboard_enabled(session)) {
+    LOG_WARN("Remote desktop Clipboard portal unavailable; install wl-clipboard to enable copy/paste");
     if (Settings::value(Settings::Client::XdpClipboardRetried).toBool()) {
       // some backends never report clipboard enabled even when granted; don't loop forever
       LOG_DEBUG("clipboard still not enabled on remote desktop session after one retry, continuing without it");
@@ -177,7 +196,8 @@ void PortalRemoteDesktop::handleInitSession(GObject *object, GAsyncResult *res)
   m_sessionSignalId = g_signal_connect(G_OBJECT(session), "closed", G_CALLBACK(handleSessionClosedCallback), this);
 
 #ifdef HAVE_LIBPORTAL_CLIPBOARD
-  xdp_session_request_clipboard(session);
+  if (Settings::value(Settings::Server::EnableClipboard).toBool())
+    xdp_session_request_clipboard(session);
   m_selectionTransferSignalId =
       g_signal_connect(G_OBJECT(session), "selection-transfer", G_CALLBACK(selectionTransferCallback), this);
   m_selectionOwnerChangedSignalId =
@@ -227,6 +247,44 @@ void PortalRemoteDesktop::glibThread(const void *)
   }
 }
 
+bool PortalRemoteDesktop::clipboardEnabled() const
+{
+  return Settings::value(Settings::Server::EnableClipboard).toBool() && m_computer->clipboardSharingEnabled();
+}
+
+bool PortalRemoteDesktop::getClipboard(ClipboardID id, IClipboard *target) const
+{
+  if (id != kClipboardClipboard || !clipboardEnabled())
+    return false;
+#ifdef HAVE_LIBPORTAL_CLIPBOARD
+  if (m_useClipboardFallback)
+    return m_waylandClipboard->copyTo(target);
+#endif
+  return IClipboard::copy(target, m_computer->getClipboardCache());
+}
+
+bool PortalRemoteDesktop::setClipboard(ClipboardID id, const IClipboard *source)
+{
+  if (!source || id != kClipboardClipboard || !clipboardEnabled())
+    return false;
+#ifdef HAVE_LIBPORTAL_CLIPBOARD
+  if (m_useClipboardFallback)
+    return m_waylandClipboard->setClipboard(source, static_cast<qint64>(m_computer->maximumClipboardSize()) * 1024);
+#endif
+  if (!IClipboard::copy(m_computer->getClipboardCache(), source))
+    return false;
+  claimClipboard();
+  return true;
+}
+
+void PortalRemoteDesktop::checkClipboards()
+{
+#ifdef HAVE_LIBPORTAL_CLIPBOARD
+  if (m_useClipboardFallback && clipboardEnabled())
+    m_waylandClipboard->requestRead(static_cast<qint64>(m_computer->maximumClipboardSize()) * 1024);
+#endif
+}
+
 void PortalRemoteDesktop::claimClipboard() const
 {
 #ifdef HAVE_LIBPORTAL_CLIPBOARD
@@ -245,6 +303,10 @@ void PortalRemoteDesktop::claimClipboard() const
 void PortalRemoteDesktop::handleSelectionTransfer(XdpSession *session, const char *mimeType, uint32_t serial) const
 {
 #ifdef HAVE_LIBPORTAL_CLIPBOARD
+  if (!clipboardEnabled()) {
+    xdp_session_selection_write_done(session, serial, false);
+    return;
+  }
   PortalClipboard::serveSelectionTransfer(m_computer->getClipboardCache(), session, mimeType, serial);
 #else
   (void)session;
@@ -256,6 +318,8 @@ void PortalRemoteDesktop::handleSelectionTransfer(XdpSession *session, const cha
 void PortalRemoteDesktop::handleSelectionOwnerChanged(XdpSession *session, char **mimeTypes, gboolean isOwner) const
 {
 #ifdef HAVE_LIBPORTAL_CLIPBOARD
+  if (!clipboardEnabled())
+    return;
   if (isOwner) {
     LOG_DEBUG("portal remote desktop selection owner changed, we own it, ignoring");
     return;

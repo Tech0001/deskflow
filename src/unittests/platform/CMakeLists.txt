@@ -53,6 +53,13 @@ elseif(UNIX)
     )
     if(HAVE_LP_CLIPBOARD)
       create_test(
+        NAME RemoteDesktopClipboardTests
+        DEPENDS platform
+        LIBS base arch Qt6::DBus
+        SOURCE RemoteDesktopClipboardTests.cpp
+        WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/src/lib/platform"
+      )
+      create_test(
         NAME LazyFileClipboardTests
         DEPENDS platform
         LIBS base arch Qt6::Network

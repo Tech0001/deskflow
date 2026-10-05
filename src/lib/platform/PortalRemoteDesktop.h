@@ -15,7 +15,12 @@
 
 #include <QByteArray>
 
+#include <atomic>
+#include <memory>
+
 namespace deskflow {
+
+class WaylandClipboard;
 
 class PortalRemoteDesktop
 {
@@ -23,7 +28,9 @@ public:
   PortalRemoteDesktop(EiComputer *computer, IEventQueue *events);
   ~PortalRemoteDesktop();
 
-  void claimClipboard() const;
+  bool getClipboard(ClipboardID id, IClipboard *target) const;
+  bool setClipboard(ClipboardID id, const IClipboard *source);
+  void checkClipboards();
 
 private:
   void glibThread(const void *);
@@ -35,6 +42,8 @@ private:
   void handleSelectionTransfer(XdpSession *session, const char *mimeType, uint32_t serial) const;
   void handleSelectionOwnerChanged(XdpSession *session, char **mimeTypes, gboolean isOwner) const;
   void reconnect(unsigned int timeout = 1000);
+  void claimClipboard() const;
+  bool clipboardEnabled() const;
 
   static void handleSessionClosedCallback(XdpSession *session, gpointer data)
   {
@@ -65,6 +74,11 @@ private:
   guint m_sessionSignalId = 0;
   guint m_selectionTransferSignalId = 0;
   guint m_selectionOwnerChangedSignalId = 0;
+
+#ifdef HAVE_LIBPORTAL_CLIPBOARD
+  std::unique_ptr<WaylandClipboard> m_waylandClipboard;
+  std::atomic<bool> m_useClipboardFallback = false;
+#endif
 
   /// The number of successful sessions we've had already
   guint m_sessionIteration = 0;

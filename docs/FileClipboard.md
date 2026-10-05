@@ -14,6 +14,13 @@ Linux requires libfuse3, `/dev/fuse`, and `fusermount3`. macOS additionally need
 the signed **Deskflow Files** companion and its enabled File Provider extension;
 see [the Mac build instructions](FileClipboardMac.md).
 
+On Hyprland, install `wl-clipboard` on both Linux computers. Deskflow uses its
+asynchronous fallback for an InputCapture server or a RemoteDesktop client when
+the session has no Clipboard portal support. An input-only portal bridge does
+not provide clipboard access itself; the receiving Deskflow build must include
+the RemoteDesktop fallback too. Ordinary text copy/paste uses TCP 24800 and
+does not require the file-sharing checkbox or TCP 24801.
+
 ## Copy and paste
 
 Copy the selected files and move the pointer to the other screen. Deskflow
@@ -118,6 +125,11 @@ end-to-end transfer with every returned byte verified. Ordinary FUSE tests skip
 on hosts without usable FUSE; the requested 1 GiB test fails if FUSE is unavailable.
 `WaylandClipboardTests` verifies URI publication through controlled wl-clipboard
 helpers. Tests use ephemeral TLS ports and temporary identities/cache directories.
+`RemoteDesktopClipboardTests` uses a private D-Bus session and a simulated portal
+to exercise client startup, incoming publication, outgoing clipboard changes,
+disabled sharing, and slow helpers through `EiComputer`. It also checks that a
+session with native clipboard support continues using the portal. These tests
+require `dbus-daemon` and Python 3 and never access the real desktop clipboard.
 
 ```sh
 DESKFLOW_TEST_GIB=1 QT_QPA_PLATFORM=minimal ctest --test-dir build/src/unittests --output-on-failure

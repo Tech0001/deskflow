@@ -14,6 +14,7 @@
 #endif
 #include "platform/XDGPowerManager.h"
 
+#include <atomic>
 #include <bitset>
 #include <climits>
 #include <libei.h>
@@ -101,6 +102,11 @@ public:
     return m_maximumClipboardSize;
   }
 
+  bool clipboardSharingEnabled() const
+  {
+    return m_enableClipboard && m_maximumClipboardSize > 0;
+  }
+
 protected:
   // IPlatformComputer overrides
   void handleSystemEvent(const Event &event) override;
@@ -152,7 +158,8 @@ private:
 
   // clipboard stuff
   EiClipboard *m_clipboard = nullptr;
-  size_t m_maximumClipboardSize = INT_MAX;
+  std::atomic<size_t> m_maximumClipboardSize = INT_MAX;
+  std::atomic<bool> m_enableClipboard = true;
 
   std::vector<ei_device *> m_eiDevices;
 

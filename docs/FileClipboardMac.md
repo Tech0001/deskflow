@@ -1,20 +1,19 @@
 # Build the integrated Mac file clipboard
 
-This is the actual Deskflow implementation, not another standalone API probe.
-The Linux build has passed its 33 test suites, including a real 1 GiB encrypted
-FUSE transfer. The Mac integration has also been compiled and exercised through
-the installed File Provider with local TLS transfers. Paired Linux/Mac acceptance
-testing is still required before calling the feature ready. Do not push changes yet.
+The Mac clipboard integration, Swift File Provider companion, shared receiver,
+and packaging script are committed in this repository. Local validation includes
+a real 1 GiB encrypted Linux FUSE transfer and Mac File Provider reads with local
+TLS transfers. Paired Linux/Mac acceptance testing is still required for each
+updated build.
 
 ## Source and configuration
 
-The handoff contains a full source snapshot and a patch against commit
-`63f911f144cb19007a56738f7b7c02ea0d428f77`. Use either:
-
-- Extract `deskflow-source.tar.gz` to a new directory and build there; no Git
-  changes or network fetch are needed.
-- Apply `deskflow-on-demand-files.patch` to a clean checkout of that commit after
-  `git apply --check`. Preserve any local Mac changes before applying it.
+Use `integrate/upstream-1.27.0` in <https://github.com/Tech0001/deskflow>.
+The integrated file-transfer implementation is included in commit `d7dcbe69` and
+its descendants. Build Deskflow and the companion from the same checkout and
+record `git rev-parse HEAD` when comparing test results with the Linux machines.
+Preserve any local Mac changes before updating. The old source snapshot and patch
+handoff are no longer needed.
 
 Use the existing Mac compiler, Qt 6.7+ / OpenSSL 3+ dependencies, signing identity,
 and Deskflow settings. The previously successful File Provider probe used

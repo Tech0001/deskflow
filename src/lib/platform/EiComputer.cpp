@@ -79,9 +79,9 @@ EiComputer::EiComputer(bool isPrimary, IEventQueue *events, bool usePortal)
       m_events->addHandler(EventTypes::EISessionClosed, getEventTarget(), [this](const auto &) {
         handlePortalSessionClosed();
       });
-      m_portalRemoteDesktop = new PortalRemoteDesktop(this, m_events);
       // Create clipboard for remote desktop (secondary computer)
       m_clipboard = new EiClipboard(kClipboardClipboard);
+      m_portalRemoteDesktop = new PortalRemoteDesktop(this, m_events);
     }
   } else {
     // Note: socket backend does not support reconnections
@@ -109,13 +109,13 @@ EiComputer::~EiComputer()
   cleanupEi();
 
   delete m_keyState;
-  delete m_clipboard;
 
 #ifdef HAVE_LIBPORTAL_SHORTCUTS
   delete m_portalGlobalShortcuts;
 #endif
   delete m_portalInputCapture;
   delete m_portalRemoteDesktop;
+  delete m_clipboard;
 }
 
 void EiComputer::eiLogEvent(ei_log_priority priority, const char *message) const
@@ -191,6 +191,8 @@ bool EiComputer::getClipboard(ClipboardID id, IClipboard *clipboard) const
   // If using portal input capture, get clipboard from there
   if (m_portalInputCapture)
     return m_portalInputCapture->getClipboard(id, clipboard);
+  if (m_portalRemoteDesktop)
+    return m_portalRemoteDesktop->getClipboard(id, clipboard);
 
   // Otherwise use our own clipboard
   if (!m_clipboard) {
@@ -497,25 +499,23 @@ bool EiComputer::setClipboard(ClipboardID id, const IClipboard *clipboard)
   // If using portal input capture, set clipboard there
   if (m_portalInputCapture)
     return m_portalInputCapture->setClipboard(id, clipboard);
+  if (m_portalRemoteDesktop)
+    return m_portalRemoteDesktop->setClipboard(id, clipboard);
 
   // Otherwise use our own clipboard
   if (!m_clipboard) {
     return false;
   }
 
-  bool ok = IClipboard::copy(m_clipboard, clipboard);
-
-  if (ok && m_portalRemoteDesktop && id == kClipboardClipboard) {
-    m_portalRemoteDesktop->claimClipboard();
-  }
-
-  return ok;
+  return IClipboard::copy(m_clipboard, clipboard);
 }
 
 void EiComputer::checkClipboards()
 {
   if (m_portalInputCapture)
     m_portalInputCapture->checkClipboards();
+  if (m_portalRemoteDesktop)
+    m_portalRemoteDesktop->checkClipboards();
 }
 
 void EiComputer::openScreensaver(bool notify)
@@ -535,19 +535,21 @@ void EiComputer::screensaver(bool activate)
 
 void EiComputer::resetOptions()
 {
-  // Should reset options to neutral, see setOptions().
-  // We don't have ei-specific options, nothing to do here
+  m_enableClipboard = true;
+  m_maximumClipboardSize = INT_MAX;
 }
 
 void EiComputer::setOptions(const OptionsList &options)
 {
   for (auto it = options.begin(); it != options.end(); ++it) {
-    if (*it == kOptionClipboardSharingSize) {
-      ++it;
-      if (it == options.end())
-        break;
+    const auto id = *it++;
+    if (it == options.end())
+      break;
+    if (id == kOptionClipboardSharing) {
+      m_enableClipboard = *it != 0;
+    } else if (id == kOptionClipboardSharingSize) {
       m_maximumClipboardSize = *it;
-      LOG_DEBUG("computer received clipboard size limit: %zu KB", m_maximumClipboardSize);
+      LOG_DEBUG("computer received clipboard size limit: %zu KB", m_maximumClipboardSize.load());
     }
   }
 }
