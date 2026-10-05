@@ -69,7 +69,7 @@ From the Deskflow checkout, fetch the support branch and export its patch:
 
 ```sh
 git fetch origin support/gitea-remotedesktop
-git show origin/support/gitea-remotedesktop:deploy/linux/hyprland-remote/deskflow-bridge.patch > /tmp/deskflow-bridge.patch
+git show FETCH_HEAD:deploy/linux/hyprland-remote/deskflow-bridge.patch > /tmp/deskflow-bridge.patch
 ```
 
 The bridge needs `cmake`, a C++23 compiler, `pkgconf`, `qt6-base`, `wayland`,
