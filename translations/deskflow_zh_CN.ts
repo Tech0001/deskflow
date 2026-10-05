@@ -1331,7 +1331,15 @@ Enabling this setting will disable the server config GUI.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <source>Copy files between Finder and Nautilus. Enable on both computers; encrypted connections and certificate verification are required. Files are copied, never moved.</source>
+        <source>Copy files between Finder and Nautilus. Enable on both computers; encrypted connections and certificate verification are required. Setup will offer firewall access when you save. Files are copied, never moved.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Set up file sharing…</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Allow file connections from selected computers and check the connection. Use this again when adding a computer or changing networks.</source>
         <translation type="unfinished"></translation>
     </message>
 </context>
@@ -1432,6 +1440,199 @@ Enabling this setting will disable the server config GUI.</source>
     <message>
         <source>Encryption Disabled</source>
         <translation>加密已禁用</translation>
+    </message>
+</context>
+<context>
+    <name>deskflow::gui::FileSharingConnectionCheck</name>
+    <message>
+        <source>File port reachable</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Not reachable: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Timed out. Check the other computer&apos;s firewall and copy a file there to start its file service.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Could not use the selected local address.</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
+    <name>deskflow::gui::FileSharingDialog</name>
+    <message>
+        <source>Set up file sharing</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Allow the selected computers to fetch copied files from this computer. Run this setup on both computers to copy files in both directions.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Local network address:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Computer</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Address</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Local firewall</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Connection to computer</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Another computer&apos;s IPv4 address</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Add computer</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Files use TCP 24801. Text clipboard sharing uses the existing Deskflow connection. Firewall rules remain until removed in your firewall. To test receiving, copy a file on the other computer first.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Allow file connections</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Check connection</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>macOS controls incoming connections by application. In System Settings → Network → Firewall → Options, allow Deskflow (deskflow-core). Receiving files also requires the signed Deskflow Files companion.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Open System Settings</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Automatic setup requires UFW or firewalld and an administrator authorization service. In your firewall, allow incoming TCP 24801 from each selected computer to this computer&apos;s local address.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Choose the computers and local network address, then allow file connections. Your system will ask for administrator authorization if needed.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Enter a single computer&apos;s IPv4 address, not a hostname or network range.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Added address</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Not checked</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Cancel setup</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Close</source>
+        <translation type="unfinished">关闭</translation>
+    </message>
+    <message>
+        <source>Waiting</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Checking this computer → selected computers on TCP 24801. A reachable port does not verify a file transfer. To test the reverse direction, run this check on the other computer.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Checking…</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
+    <name>deskflow::gui::FileSharingFirewall</name>
+    <message>
+        <source>Select another computer&apos;s IPv4 address and a local network address.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Checking the firewall. Your system may ask for administrator authorization.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>UFW is inactive; no rule was added and it was not enabled. Use Check connection to test the other computer.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Could not check UFW: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>firewalld is not running or could not be checked: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Automatic firewall setup is unavailable. Configure incoming TCP 24801 from the selected computers in your firewall.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Firewall setup finished. Review each result below. Run Check connection on the other computer to test access to this one.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Allowing file connections from %1…</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Firewall rule saved</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Rule not confirmed: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Could not determine the source zone. Configure this computer&apos;s rule in firewalld manually.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Could not determine the firewall zone: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>The firewall returned an invalid zone.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Permanent rule not confirmed: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Firewall rule saved and active</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Rule saved for reboot, but could not activate it: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Setup stopped. Earlier successful rules remain; retry after resolving the reported error.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Setup cancelled. Rules already applied may remain. Check the firewall before retrying.</source>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 <context>

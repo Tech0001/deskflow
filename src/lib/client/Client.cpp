@@ -30,6 +30,9 @@
 #include "net/SecureSocket.h"
 #include "net/TCPSocket.h"
 
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QMetaEnum>
 
 #include <cstdlib>
@@ -174,6 +177,17 @@ void Client::handshakeComplete()
     saveRelativeRestorePosition();
   }
   sendEvent(EventTypes::ClientConnected);
+  if (m_serverAddress.getAddress()) {
+    const QJsonArray peers{QJsonObject{
+        {"name", QString::fromStdString(m_serverAddress.getHostname())},
+        {"address", QString::fromStdString(ARCH->addrToString(m_serverAddress.getAddress()))}
+    }};
+    ipcSendToClient(
+        "fileSharingPeers", QJsonDocument(peers)
+                                .toJson(QJsonDocument::Compact)
+                                .toBase64(QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals)
+    );
+  }
 }
 
 bool Client::isConnected() const

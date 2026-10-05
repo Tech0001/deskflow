@@ -42,6 +42,8 @@ add_library(${target} STATIC
   config/ServerConfig.h
   core/CoreProcess.cpp
   core/CoreProcess.h
+  core/FileSharingFirewall.cpp
+  core/FileSharingFirewall.h
   core/NetworkMonitor.cpp
   core/NetworkMonitor.h
   dialogs/AboutDialog.cpp
@@ -53,6 +55,8 @@ add_library(${target} STATIC
   dialogs/ClientConfigDialog.h
   dialogs/ClientConfigDialog.cpp
   dialogs/ClientConfigDialog.ui
+  dialogs/FileSharingDialog.cpp
+  dialogs/FileSharingDialog.h
   dialogs/ComputerSettingsDialog.cpp
   dialogs/ComputerSettingsDialog.h
   dialogs/ComputerSettingsDialog.ui

@@ -9,6 +9,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 
 class IEventQueue;
 
@@ -23,6 +24,12 @@ class IStream
 public:
   IStream() = default;
   virtual ~IStream() = default;
+
+  // Numeric address of a connected network peer, if this is a network stream.
+  virtual std::string peerAddress() const
+  {
+    return {};
+  }
   //! @name manipulators
   //@{
 

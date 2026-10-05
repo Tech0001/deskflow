@@ -7,6 +7,8 @@
 
 #include "CoreProcess.h"
 
+#include <QJsonDocument>
+
 #include "common/ExitCodes.h"
 #include "gui/ipc/CoreIpcClient.h"
 #include "gui/ipc/DaemonIpcClient.h"
@@ -602,6 +604,8 @@ QPair<bool, QString> CoreProcess::persistServerConfig() const
 
 void CoreProcess::setConnectionState(ConnectionState state)
 {
+  if (state == ConnectionState::Disconnected)
+    m_fileSharingPeers = {};
   if (m_connectionState == state) {
     return;
   }
@@ -612,6 +616,8 @@ void CoreProcess::setConnectionState(ConnectionState state)
 
 void CoreProcess::setProcessState(ProcessState state)
 {
+  if (state == ProcessState::Stopped)
+    m_fileSharingPeers = {};
   if (m_processState == state) {
     return;
   }
@@ -626,7 +632,10 @@ void CoreProcess::setProcessState(ProcessState state)
 
 void CoreProcess::onCoreIpcMessageReceived(const QString &command, const QString &args)
 {
-  if (command == "fileTransfer") {
+  if (command == "fileSharingPeers") {
+    m_fileSharingPeers =
+        QJsonDocument::fromJson(QByteArray::fromBase64(args.toLatin1(), QByteArray::Base64UrlEncoding)).array();
+  } else if (command == "fileTransfer") {
     Q_EMIT fileTransferProgress(args);
   } else if (command == "connectionState") {
     const auto metaEnum = QMetaEnum::fromType<ConnectionState>();

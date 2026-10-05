@@ -25,6 +25,10 @@
 #include "server/ClientProxyUnknown.h"
 #include "server/PrimaryClient.h"
 
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+
 #ifdef _WIN32
 #include <algorithm>
 #include <array>
@@ -318,12 +322,24 @@ void Server::sendConnectedClientsIpc() const
 {
   const auto primaryName = getName(m_primaryClient);
   QStringList clientList;
-  for (const auto &[name, _] : m_clients) {
+  QJsonArray peers;
+  for (const auto &[name, client] : m_clients) {
     if (name != primaryName) {
       clientList.append(QString::fromStdString(name));
+      if (const auto stream = client->getStream(); stream && !stream->peerAddress().empty())
+        peers.append(
+            QJsonObject{
+                {"name", QString::fromStdString(name)}, {"address", QString::fromStdString(stream->peerAddress())}
+            }
+        );
     }
   }
   ipcSendToClient("connectedClients", clientList.join(","));
+  ipcSendToClient(
+      "fileSharingPeers", QJsonDocument(peers)
+                              .toJson(QJsonDocument::Compact)
+                              .toBase64(QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals)
+  );
 }
 
 std::string Server::getName(const BaseClientProxy *client) const

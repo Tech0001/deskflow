@@ -12,6 +12,7 @@
 #include "gui/FileTail.h"
 #include "gui/config/ServerConfig.h"
 
+#include <QJsonArray>
 #include <QMutex>
 #include <QObject>
 #include <QProcess>
@@ -70,6 +71,10 @@ public:
   {
     return m_connectionState;
   }
+  QJsonArray fileSharingPeers() const
+  {
+    return m_fileSharingPeers;
+  }
 
   // setters
   void setAddress(const QString &address)
@@ -124,6 +129,7 @@ private:
 
   const ServerConfig &m_serverConfig;
   QString m_address;
+  QJsonArray m_fileSharingPeers;
   ProcessState m_processState = ProcessState::Stopped;
   ConnectionState m_connectionState = ConnectionState::Disconnected;
   Settings::CoreMode m_mode = Settings::CoreMode::None;

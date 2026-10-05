@@ -8,6 +8,7 @@
 
 #pragma once
 #include <QDialog>
+#include <QJsonArray>
 
 #include "gui/config/ServerConfig.h"
 
@@ -23,7 +24,7 @@ class SettingsDialog : public QDialog
 
 public:
   void extracted();
-  SettingsDialog(QWidget *parent, const ServerConfig &serverConfig);
+  SettingsDialog(QWidget *parent, const ServerConfig &serverConfig, QJsonArray fileSharingPeers = {});
   ~SettingsDialog() override;
 
 Q_SIGNALS:
@@ -44,6 +45,7 @@ private:
   void updateTlsControlsEnabled();
   void resetAllSettings();
   void updateText();
+  void setupFileSharing();
 
   /// @brief Load all settings.
   void loadFromConfig();
@@ -87,4 +89,5 @@ private:
   std::unique_ptr<Ui::SettingsDialog> ui;
   const ServerConfig &m_serverConfig;
   SettingsDialogButtonBox *m_buttonBox = nullptr;
+  QJsonArray m_fileSharingPeers;
 };

@@ -521,7 +521,7 @@ void MainWindow::openGetNewVersionUrl() const
 
 void MainWindow::openSettings()
 {
-  auto dialog = SettingsDialog(this, m_serverConfig);
+  auto dialog = SettingsDialog(this, m_serverConfig, m_coreProcess.fileSharingPeers());
 
   connect(&dialog, &SettingsDialog::requestRemoveAllSettings, this, &MainWindow::clearSettings, Qt::UniqueConnection);
   if (dialog.exec() == QDialog::Accepted) {

@@ -7,3 +7,12 @@ create_test(
   SOURCE NetworkMonitorTests.cpp
   WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/src/lib/gui"
 )
+
+if(UNIX AND NOT APPLE)
+  create_test(
+    NAME FileSharingFirewallTests
+    DEPENDS gui
+    SOURCE FileSharingFirewallTests.cpp
+    WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/src/lib/gui"
+  )
+endif()

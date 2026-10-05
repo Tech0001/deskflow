@@ -718,7 +718,17 @@
              <string>Share copied files and folders</string>
             </property>
             <property name="toolTip">
-             <string>Copy files between Finder and Nautilus. Enable on both computers; encrypted connections and certificate verification are required. Files are copied, never moved.</string>
+             <string>Copy files between Finder and Nautilus. Enable on both computers; encrypted connections and certificate verification are required. Setup will offer firewall access when you save. Files are copied, never moved.</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="btnFileSharingSetup">
+            <property name="text">
+             <string>Set up file sharing…</string>
+            </property>
+            <property name="toolTip">
+             <string>Allow file connections from selected computers and check the connection. Use this again when adding a computer or changing networks.</string>
             </property>
            </widget>
           </item>

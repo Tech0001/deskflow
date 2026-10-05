@@ -7,6 +7,7 @@
  */
 
 #include "SettingsDialog.h"
+#include "FileSharingDialog.h"
 #include "common/LogLevel.h"
 #include "common/PlatformInfo.h"
 #include "ui_SettingsDialog.h"
@@ -24,11 +25,12 @@
 
 using namespace deskflow::gui;
 
-SettingsDialog::SettingsDialog(QWidget *parent, const ServerConfig &serverConfig)
+SettingsDialog::SettingsDialog(QWidget *parent, const ServerConfig &serverConfig, QJsonArray fileSharingPeers)
     : QDialog(parent),
       ui{std::make_unique<Ui::SettingsDialog>()},
       m_serverConfig(serverConfig),
-      m_buttonBox{new SettingsDialogButtonBox(this)}
+      m_buttonBox{new SettingsDialogButtonBox(this)},
+      m_fileSharingPeers(std::move(fileSharingPeers))
 {
 
   ui->setupUi(this);
@@ -107,6 +109,8 @@ void SettingsDialog::initConnections() const
   connect(ui->groupSecurity, &QGroupBox::toggled, this, &SettingsDialog::updateTlsControlsEnabled);
   connect(ui->cbRequireClientCert, &QCheckBox::toggled, this, &SettingsDialog::updateTlsControlsEnabled);
   connect(ui->cbShareFiles, &QCheckBox::toggled, this, &SettingsDialog::setButtonBoxEnabledButtons);
+  connect(ui->cbShareFiles, &QCheckBox::toggled, this, &SettingsDialog::updateTlsControlsEnabled);
+  connect(ui->btnFileSharingSetup, &QPushButton::clicked, this, &SettingsDialog::setupFileSharing);
   connect(ui->groupService, &QGroupBox::toggled, this, &SettingsDialog::updateControls);
   connect(ui->btnClearAllSettings, &QPushButton::clicked, this, &SettingsDialog::resetAllSettings);
   connect(ui->btnTlsRegenCert, &QPushButton::clicked, this, &SettingsDialog::regenCertificates);
@@ -222,6 +226,10 @@ void SettingsDialog::updateText()
 
 void SettingsDialog::accept()
 {
+  const bool enablingFiles = ui->groupSecurity->isChecked() && ui->cbRequireClientCert->isChecked() &&
+                             ui->cbShareFiles->isChecked() && !Settings::value(Settings::Security::ShareFiles).toBool();
+  if (enablingFiles)
+    setupFileSharing();
   Settings::setValue(Settings::Core::Port, ui->sbPort->value());
   Settings::setValue(Settings::Core::Interface, ui->comboInterface->currentData());
   Settings::setValue(Settings::Log::Level, ui->comboLogLevel->currentData());
@@ -254,6 +262,12 @@ void SettingsDialog::accept()
   Settings::setValue(Settings::Core::ProcessMode, mode);
 
   QDialog::accept();
+}
+
+void SettingsDialog::setupFileSharing()
+{
+  FileSharingDialog dialog(this, m_fileSharingPeers);
+  dialog.exec();
 }
 
 void SettingsDialog::loadFromConfig()
@@ -342,8 +356,10 @@ void SettingsDialog::updateTlsControlsEnabled()
   ui->btnTlsRegenCert->setEnabled(enabled);
   ui->cbRequireClientCert->setEnabled(enabled && !isClientMode());
   ui->cbShareFiles->setEnabled(enabled && ui->cbRequireClientCert->isChecked());
+  ui->btnFileSharingSetup->setEnabled(enabled && ui->cbRequireClientCert->isChecked() && ui->cbShareFiles->isChecked());
 #ifdef Q_OS_WIN
   ui->cbShareFiles->setVisible(false);
+  ui->btnFileSharingSetup->setVisible(false);
 #endif
 }
 

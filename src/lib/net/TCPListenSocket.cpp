@@ -18,6 +18,8 @@
 #include "net/TCPSocket.h"
 #include "net/TSocketMultiplexerMethodJob.h"
 
+#include <QScopeGuard>
+
 //
 // TCPListenSocket
 //
@@ -99,7 +101,15 @@ std::unique_ptr<IDataSocket> TCPListenSocket::accept()
 {
   std::unique_ptr<IDataSocket> socket;
   try {
-    socket = std::make_unique<TCPSocket>(m_events, m_socketMultiplexer, ARCH->acceptSocket(m_socket, nullptr));
+    ArchNetAddress peer = nullptr;
+    const auto releasePeer = qScopeGuard([&] {
+      if (peer)
+        ARCH->closeAddr(peer);
+    });
+    auto accepted = std::make_unique<TCPSocket>(m_events, m_socketMultiplexer, ARCH->acceptSocket(m_socket, &peer));
+    if (peer)
+      accepted->setPeerAddress(ARCH->addrToString(peer));
+    socket = std::move(accepted);
     setListeningJob();
     return socket;
   } catch (ArchNetworkException &) {

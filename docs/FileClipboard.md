@@ -8,8 +8,9 @@ file transfer yet.
 
 In Settings, enable **Share copied files and folders** under encrypted
 connections on both computers. Keep TLS, certificate verification, and ordinary
-clipboard sharing enabled. Allow incoming TCP **24801** from the other computer
-on both hosts; the usual mouse/keyboard connection still uses TCP 24800.
+clipboard sharing enabled. Saving after enabling files opens **Set up file
+sharing**. The same setup is available through the **Set up file sharing…**
+button for an existing installation or when adding another computer.
 Linux requires libfuse3, `/dev/fuse`, and `fusermount3`. macOS additionally needs
 the signed **Deskflow Files** companion and its enabled File Provider extension;
 see [the Mac build instructions](FileClipboardMac.md).
@@ -20,6 +21,38 @@ the session has no Clipboard portal support. An input-only portal bridge does
 not provide clipboard access itself; the receiving Deskflow build must include
 the RemoteDesktop fallback too. Ordinary text copy/paste uses TCP 24800 and
 does not require the file-sharing checkbox or TCP 24801.
+
+## Firewall setup
+
+Files need incoming TCP **24801** on the computer they are copied from. Run setup
+on both computers for copying in both directions. The usual mouse/keyboard
+connection still uses TCP 24800.
+
+On Linux, choose the local network address and select the connected computers
+that may fetch files. An offline computer can be added by its IPv4 address.
+**Allow file connections** asks for administrator authorization and adds
+persistent rules using UFW or firewalld. UFW rules are limited to the selected
+interface, local address, remote address, and TCP 24801. Firewalld uses the
+matching source/interface zone and a rule limited to both addresses and TCP
+24801, saved separately to the permanent and runtime configuration. Setup does
+not enable an inactive firewall or reload unrelated rules. Unsupported firewall
+setups display manual instructions. Review the results: denied authorization or
+a failed command does not count as a successful setup.
+
+On macOS, setup provides **Open System Settings** and instructions for allowing
+Deskflow (`deskflow-core`) in Network → Firewall → Options. The macOS application
+firewall controls access by application, rather than by selected IP address.
+
+**Check connection** tests this computer's access to the selected computers on
+TCP 24801. Copy a file on the other computer first to start its file service.
+For the opposite direction, run the check on the other computer. A reachable
+port confirms TCP connectivity only; it does not verify certificates, the Mac
+companion, or a complete file transfer. Finish by copying and pasting a file.
+
+Opening setup does not change firewall rules until **Allow file connections**
+is pressed. Rules remain after disabling file sharing and must be removed in
+the firewall if no longer needed. Run setup again after an address or network
+change; old address-specific rules are not automatically migrated or removed.
 
 ## Copy and paste
 
@@ -130,6 +163,15 @@ to exercise client startup, incoming publication, outgoing clipboard changes,
 disabled sharing, and slow helpers through `EiComputer`. It also checks that a
 session with native clipboard support continues using the portal. These tests
 require `dbus-daemon` and Python 3 and never access the real desktop clipboard.
+
+`FileSharingDialogTests` covers offering setup on save, cancelling Settings,
+existing installations, and connected-computer selection. On Linux,
+`FileSharingFirewallTests` runs fake firewall/authorization commands to check
+address scoping, inactive firewalls, denied authorization, partial failures,
+cancellation, and source-zone selection. Its connection checks use real local
+TCP sockets without sending file data. These tests never modify the host's
+firewall. `SocketPeerAddressTests` checks accepted-peer address discovery and
+preservation through the stream wrapper using a local TCP connection.
 
 ```sh
 DESKFLOW_TEST_GIB=1 QT_QPA_PLATFORM=minimal ctest --test-dir build/src/unittests --output-on-failure

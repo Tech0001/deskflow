@@ -53,6 +53,14 @@ public:
   bool isReady() const override;
   bool isFatal() const override;
   uint32_t getSize() const override;
+  std::string peerAddress() const override
+  {
+    return m_peerAddress;
+  }
+  void setPeerAddress(const std::string &address)
+  {
+    m_peerAddress = address;
+  }
 
   // IDataSocket overrides
   void connect(const NetworkAddress &) override;
@@ -144,6 +152,7 @@ private:
   bool m_connected;
   Mutex m_mutex;
   ArchSocket m_socket;
+  std::string m_peerAddress;
   IEventQueue *m_events;
   CondVar<bool> m_flushed;
   SocketMultiplexer *m_socketMultiplexer;

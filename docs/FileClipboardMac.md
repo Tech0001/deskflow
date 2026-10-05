@@ -118,6 +118,16 @@ debugging. Keep ordinary clipboard sharing, **Share copied files and folders**,
 TLS, and certificate checking enabled. Existing peer trust and TCP 24801 access
 should remain as configured.
 
+Settings → **Set up file sharing…** provides **Open System Settings** and
+instructions for Network → Firewall → Options. Allow Deskflow (`deskflow-core`)
+to receive connections there; this is application-level access on macOS.
+The setup also appears when enabling copied-file sharing and saving Settings.
+Configure the Linux computer's incoming file access through its corresponding
+setup dialog. **Check connection** tests the other computer's TCP 24801 only;
+copy a file there first to start its file service, then use the paired tests
+below to validate an actual transfer. This new GUI flow still needs a Mac build
+and local acceptance check.
+
 ## Paired acceptance tests
 
 Activate matching new Deskflow builds on both machines. New version 2 offers

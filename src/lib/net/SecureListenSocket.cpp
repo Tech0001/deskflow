@@ -13,6 +13,8 @@
 #include "common/Settings.h"
 #include "net/SocketMultiplexer.h"
 
+#include <QScopeGuard>
+
 //
 // SecureListenSocket
 //
@@ -32,9 +34,16 @@ std::unique_ptr<IDataSocket> SecureListenSocket::accept()
 {
   std::unique_ptr<SecureSocket> secureSocket;
   try {
+    ArchNetAddress peer = nullptr;
+    const auto releasePeer = qScopeGuard([&] {
+      if (peer)
+        ARCH->closeAddr(peer);
+    });
     secureSocket = std::make_unique<SecureSocket>(
-        events(), socketMultiplexer(), ARCH->acceptSocket(socket(), nullptr), m_securityLevel
+        events(), socketMultiplexer(), ARCH->acceptSocket(socket(), &peer), m_securityLevel
     );
+    if (peer)
+      secureSocket->setPeerAddress(ARCH->addrToString(peer));
     secureSocket->initSsl(true);
 
     setListeningJob();
