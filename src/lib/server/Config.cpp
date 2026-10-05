@@ -52,8 +52,8 @@ bool Config::addComputer(const std::string &name)
   for (const auto &alias : aliases)
     m_nameToCanonicalName.try_emplace(alias.toStdString(), name);
 
-  // Apply the per-computer preset before reading screen options. addOption
-  // keeps the first value, so the preset also works with an external config.
+  // Apply the preset before the configured modifiers. addOption keeps the
+  // first value, so the preset also works with an external config.
   const auto swappedScreens = Settings::value(Settings::Server::SwapControlSuperScreens).toStringList();
   if (swappedScreens.contains(QString::fromStdString(name), Qt::CaseInsensitive)) {
     addOption(name, kOptionModifierMapForControl, kKeyModifierIDSuper);

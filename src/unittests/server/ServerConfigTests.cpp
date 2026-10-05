@@ -10,6 +10,7 @@
 #include "common/Settings.h"
 #include "server/Config.h"
 
+#include <QSettings>
 #include <sstream>
 
 class OnlySystemFilter : public InputFilter::Condition
@@ -36,8 +37,19 @@ using namespace deskflow::server;
 void ServerConfigTests::initTestCase()
 {
   QVERIFY(m_settingsDir.isValid());
-  Settings::setSettingsFile(m_settingsDir.filePath("Deskflow.conf"));
+  const auto path = m_settingsDir.filePath("Deskflow.conf");
+  {
+    // Exercise the 1.26 settings migration used by existing external configs.
+    QSettings legacy(path, QSettings::IniFormat);
+    legacy.setValue("screen_mac.local/name", "mac.local");
+    legacy.setValue("screen_linux.local/name", "linux.local");
+    legacy.setValue("screen_mac.local/switchCornerSize", 17);
+  }
+  Settings::setSettingsFile(path);
   Settings::setStateFile(m_settingsDir.filePath("Deskflow.state"));
+  QVERIFY(Settings::knownComputers().contains("mac.local"));
+  QVERIFY(Settings::knownComputers().contains("linux.local"));
+  QCOMPARE(Settings::value(Settings::Computer::SwitchCornerSize.arg("mac.local")).toInt(), 17);
 }
 
 void ServerConfigTests::modifierSwap_selectedComputerOnly()
@@ -45,23 +57,26 @@ void ServerConfigTests::modifierSwap_selectedComputerOnly()
   const auto key = Settings::Server::SwapControlSuperScreens;
   Settings::setValue(key, QStringList{"mac.local"});
   Config config(nullptr);
-  QVERIFY(config.addScreen("Mac.local"));
-  QVERIFY(config.addScreen("linux.local"));
+  QVERIFY(config.addComputer("Mac.local"));
+  QVERIFY(config.addComputer("linux.local"));
   const auto mac = config.getOptions("Mac.local");
   QVERIFY(mac != nullptr);
   QCOMPARE(mac->at(kOptionModifierMapForControl), OptionValue(kKeyModifierIDSuper));
   QCOMPARE(mac->at(kOptionModifierMapForSuper), OptionValue(kKeyModifierIDControl));
   const auto linux = config.getOptions("linux.local");
   QVERIFY(linux != nullptr);
-  QVERIFY(!linux->contains(kOptionModifierMapForControl));
-  QVERIFY(!linux->contains(kOptionModifierMapForSuper));
+  QCOMPARE(linux->at(kOptionModifierMapForControl), OptionValue(kKeyModifierIDControl));
+  QCOMPARE(linux->at(kOptionModifierMapForSuper), OptionValue(kKeyModifierIDSuper));
   Settings::setValue(key);
 }
 
 void ServerConfigTests::modifierSwap_externalConfigAndToggleOff()
 {
   const auto key = Settings::Server::SwapControlSuperScreens;
+  const auto ctrl = Settings::Computer::ModifierCtrl.arg("mac.local");
   const std::string text = "section: screens\nmac.local:\nctrl = alt\nsuper = super\nshift = shift\nend\n";
+  // Upstream now reads modifier mappings from general settings.
+  Settings::setValue(ctrl, "alt");
   Settings::setValue(key, QStringList{"mac.local"});
   // Reload settings to exercise persistence across restarts.
   const auto path = Settings::settingsFile();
@@ -87,12 +102,13 @@ void ServerConfigTests::modifierSwap_externalConfigAndToggleOff()
   QCOMPARE(restored->at(kOptionModifierMapForControl), OptionValue(kKeyModifierIDAlt));
   QCOMPARE(restored->at(kOptionModifierMapForSuper), OptionValue(kKeyModifierIDSuper));
   Settings::setValue(key);
+  Settings::setValue(ctrl);
 }
 
 void ServerConfigTests::externalConfig_preservesOffsetAndGeneralScreenOptions()
 {
   const auto swap = Settings::Server::SwapControlSuperScreens;
-  const auto corner = Settings::Screen::SwitchCornerSize.arg("mac.local");
+  const auto corner = Settings::Computer::SwitchCornerSize.arg("mac.local");
   Settings::setValue(swap, QStringList{"mac.local"});
   Settings::setValue(corner, 17);
   // Legacy screen entries retain their links, while moved options come from
@@ -125,7 +141,7 @@ end
   QVERIFY(mac != nullptr);
   QCOMPARE(mac->at(kOptionModifierMapForControl), OptionValue(kKeyModifierIDSuper));
   QCOMPARE(mac->at(kOptionModifierMapForSuper), OptionValue(kKeyModifierIDControl));
-  QCOMPARE(mac->at(kOptionScreenSwitchCornerSize), OptionValue(17));
+  QCOMPARE(mac->at(kOptionComputerSwitchCornerSize), OptionValue(17));
   Settings::setValue(swap);
   Settings::setValue(corner);
 }
